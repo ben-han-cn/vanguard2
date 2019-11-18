@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+package client;
+
+import "rrset.proto";
+
+message AddZoneRequest {
+    string zone = 1;
+    string zone_content = 2;
+}
+
+message AddZoneResponse {
+}
+
+message DeleteZoneRequest {
+    repeated string zones = 1;
+}
+
+message DeleteZoneResponse {
+}
+
+message AddRRsetRequest {
+    string zone = 1;
+    repeated RRset rrsets = 2;
+}
+
+message AddRRsetResponse {
+}
+
+message DeleteDomainRequest{
+    string zone = 1;
+    repeated string names = 2;
+}
+
+message DeleteDomainResponse {
+}
+
+message DeleteRRsetRequest {
+    string zone = 1;
+    repeated RRsetHeader rrsets = 2;
+}
+
+message DeleteRRsetResponse {
+}
+
+message DeleteRdataRequest {
+    string zone = 1;
+    repeated RRset rrsets = 2;
+}
+
+message DeleteRdataResponse {
+}
+
+message UpdateRdataRequest {
+    string zone = 1;
+    RRset old_rrset = 2;
+    RRset new_rrset = 3;
+}
+
+message UpdateRdataResponse {
+}
+
+
+service DynamicUpdateInterface {
+    rpc AddZone(AddZoneRequest) returns (AddZoneResponse) {}
+    rpc DeleteZone(DeleteZoneRequest) returns (DeleteZoneResponse) {}
+    rpc AddRRset(AddRRsetRequest) returns (AddRRsetResponse) {}
+    rpc DeleteDomain(DeleteDomainRequest) returns (DeleteDomainResponse) {}
+    rpc DeleteRRset(DeleteRRsetRequest) returns (DeleteRRsetResponse) {}
+    rpc DeleteRdata(DeleteRdataRequest) returns (DeleteRdataResponse) {}
+    rpc UpdateRdata(UpdateRdataRequest) returns (UpdateRdataResponse) {}
+}

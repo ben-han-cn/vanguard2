@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package client;
+
+enum RRType {
+    A = 0;
+    AAAA = 1;
+    NS = 2;
+    SOA = 3;
+    CNAME = 4;
+    MX = 5;
+    TXT = 6;
+    SRV = 7;
+    PTR = 8;
+}
+
+
+message RRset {
+    string name = 1;
+    RRType type = 2;
+    uint32 ttl = 3;
+    repeated string rdatas = 4;
+}
+
+message RRsetHeader {
+    string name = 1;
+    RRType type = 2;
+}

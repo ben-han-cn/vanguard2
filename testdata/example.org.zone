@@ -1,0 +1,13 @@
+example.org. 300 IN SOA xxx.net. ns.example.org. 100 1800 900 604800 86400
+example.org. 300 IN NS ns.example.org.
+example.org. 300 IN A 192.0.2.1
+ns.example.org. 300 IN A 192.0.2.2
+ns.example.org. 300 IN AAAA 2001:db8::2
+cname.example.org. 300 IN CNAME canonical.example.org
+child.example.org. 300 IN NS ns.child.example.org.
+ns.child.example.org. 300 IN A 192.0.2.153
+grand.child.example.org. 300 IN NS ns.grand.child.example.org.
+ns.grand.child.example.org. 300 IN AAAA 2001:db8::253
+foo.wild.example.org. 300 IN A 192.0.2.3
+*.foo.example.org. 300 IN A 192.0.2.1
+txt.example.org. 300 IN TXT "vanguard2" "is awesome"
