@@ -1,16 +1,12 @@
-use crate::domaintree::{
-    node::NodePtr,
-    node_chain::NodeChain,
-    tree::{FindResultFlag, RBTree},
-};
-use crate::error::DataSrcError;
-use crate::rdataset::Rdataset;
-use crate::zone::{FindOption, FindResult, FindResultType, ZoneFinder, ZoneUpdater};
+use crate::auth::error::DataSrcError;
+use crate::auth::rdataset::Rdataset;
+use crate::auth::zone::{FindOption, FindResult, FindResultType, ZoneFinder, ZoneUpdater};
+use domaintree::{DomainTree, FindResultFlag, NodeChain, NodePtr};
 use failure::Result;
 use r53::{LabelSequence, Name, NameRelation, RData, RRType, RRset};
 use std::mem::swap;
 
-type ZoneData = RBTree<Rdataset>;
+type ZoneData = DomainTree<Rdataset>;
 
 pub struct MemoryZone {
     origin: Name,
@@ -32,6 +28,18 @@ impl MemoryZone {
             root_node,
             data,
         }
+    }
+
+    fn remove_node(&mut self, name: &Name, node: NodePtr<Rdataset>) {
+        if name.is_wildcard() {
+            if let Ok(parent) = name.parent(1) {
+                let find_result = self.data.find(&parent);
+                if find_result.flag == FindResultFlag::ExacatMatch {
+                    find_result.node.set_wildcard(false)
+                }
+            }
+        }
+        self.data.remove_node(node);
     }
 }
 
@@ -96,7 +104,7 @@ impl ZoneUpdater for MemoryZone {
                 if rdataset.is_empty() {
                     let node = find_result.node;
                     if node != self.root_node {
-                        self.data.remove_node(node);
+                        self.remove_node(name, node)
                     }
                 }
             }
@@ -122,7 +130,7 @@ impl ZoneUpdater for MemoryZone {
                 rdataset.delete_rdata(rrset)?;
                 if rdataset.is_empty() {
                     let node = find_result.node;
-                    self.data.remove_node(node);
+                    self.remove_node(&rrset.name, node);
                 }
                 Ok(())
             } else {
@@ -163,7 +171,7 @@ impl ZoneUpdater for MemoryZone {
         let find_result = self.data.find(&name);
         if find_result.flag == FindResultFlag::ExacatMatch {
             let node = find_result.node;
-            self.data.remove_node(node);
+            self.remove_node(name, node);
             Ok(())
         } else {
             Err(DataSrcError::NameNotFound(name.to_string()).into())

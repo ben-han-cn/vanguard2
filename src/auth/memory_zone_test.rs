@@ -1,5 +1,5 @@
-use crate::memory_zone::MemoryZone;
-use crate::zone::{FindOption, FindResult, FindResultType, ZoneFinder, ZoneUpdater};
+use crate::auth::memory_zone::MemoryZone;
+use crate::auth::zone::{FindOption, FindResult, FindResultType, ZoneFinder, ZoneUpdater};
 use r53::{Name, RRType, RRset};
 use std::str::FromStr;
 

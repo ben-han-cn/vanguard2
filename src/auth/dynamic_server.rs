@@ -3,7 +3,7 @@ use super::{
     proto::{self, dynamic_update_interface, dynamic_update_interface_grpc},
     zones::AuthZone,
 };
-use datasrc::ZoneUpdater;
+use crate::auth::zone::ZoneUpdater;
 use failure::Result;
 use grpc_helpers::provide_grpc_response;
 use grpc_helpers::{spawn_service_thread, ServerHandle};

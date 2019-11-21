@@ -1,19 +1,19 @@
-use super::error::AuthError;
-use datasrc::{
-    load_zone, zone::FindResult, zone::ZoneFinder, FindOption, FindResultFlag, FindResultType,
-    MemoryZone, RBTree,
-};
+use crate::auth::error::AuthError;
+use crate::auth::memory_zone::MemoryZone;
+use crate::auth::zone::{FindOption, FindResult, FindResultType, ZoneFinder};
+use crate::auth::zone_loader::load_zone;
+use domaintree::{DomainTree, FindResultFlag};
 use failure::Result;
 use r53::{HeaderFlag, Message, MessageBuilder, Name, RRType, Rcode};
 
 pub struct AuthZone {
-    zones: RBTree<MemoryZone>,
+    zones: DomainTree<MemoryZone>,
 }
 
 impl AuthZone {
     pub fn new() -> Self {
         AuthZone {
-            zones: RBTree::new(),
+            zones: DomainTree::new(),
         }
     }
 

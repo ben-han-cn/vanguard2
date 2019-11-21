@@ -6,7 +6,7 @@ use crate::{
     config::ForwarderConfig,
     recursor::util::{Nameserver, NameserverStore, Sender},
 };
-use datasrc::RBTree;
+use domaintree::DomainTree;
 use futures::{prelude::*, Future};
 use r53::{Message, Name, RRType};
 use std::{
@@ -17,14 +17,14 @@ use std::{
 
 #[derive(Clone)]
 pub struct ForwarderManager {
-    forwarders: Arc<RBTree<ForwarderGroup>>,
+    forwarders: Arc<DomainTree<ForwarderGroup>>,
     pool: Arc<RwLock<ForwarderPool>>,
 }
 
 impl ForwarderManager {
     pub fn new(conf: &ForwarderConfig) -> Self {
         let pool = ForwarderPool::new(conf);
-        let mut groups = RBTree::new();
+        let mut groups = DomainTree::new();
         pool.init_groups(&mut groups, conf);
         ForwarderManager {
             forwarders: Arc::new(groups),

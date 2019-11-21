@@ -3,7 +3,7 @@ use crate::{
     config::ForwarderConfig,
     recursor::util::{Nameserver, NameserverStore},
 };
-use datasrc::RBTree;
+use domaintree::DomainTree;
 use r53::Name;
 use std::{cell::Cell, cmp::Eq, net::SocketAddr, ops::Rem, str::FromStr};
 
@@ -27,7 +27,7 @@ impl ForwarderPool {
         }
     }
 
-    pub fn init_groups(&self, groups: &mut RBTree<ForwarderGroup>, conf: &ForwarderConfig) {
+    pub fn init_groups(&self, groups: &mut DomainTree<ForwarderGroup>, conf: &ForwarderConfig) {
         for conf in &conf.forwarders {
             let name = Name::new(conf.zone_name.as_ref()).unwrap();
             let indexes = conf

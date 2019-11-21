@@ -1,5 +1,5 @@
-use crate::memory_zone::MemoryZone;
-use crate::zone::ZoneUpdater;
+use crate::auth::memory_zone::MemoryZone;
+use crate::auth::zone::ZoneUpdater;
 use failure::Result;
 use r53::{Name, RRset};
 use std::str::FromStr;

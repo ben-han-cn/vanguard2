@@ -1,4 +1,4 @@
-use crate::error::DataSrcError;
+use crate::auth::error::DataSrcError;
 use failure::Result;
 use r53::{Name, RData, RRClass, RRTtl, RRType, RRset};
 use std::mem::swap;
