@@ -21,6 +21,9 @@ pub enum VgError {
 
     #[fail(display = "query get loop")]
     LoopedQuery,
+
+    #[fail(display = "response is too many to send to user")]
+    FullResponseQueue,
 }
 
 impl From<io::Error> for VgError {

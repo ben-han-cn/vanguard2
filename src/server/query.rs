@@ -1,5 +1,3 @@
-use failure;
-use futures::Future;
 use r53::Message;
 use std::net::SocketAddr;
 
@@ -18,9 +16,4 @@ impl Query {
             done: false,
         }
     }
-}
-
-pub trait QueryHandler: Send + Sync {
-    type Response: Future<Item = Query, Error = failure::Error> + Send + 'static;
-    fn handle_query(&self, query: Query) -> Self::Response;
 }

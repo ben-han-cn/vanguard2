@@ -2,6 +2,8 @@ use super::zones::AuthZone;
 use crate::{config::AuthorityConfig, server::Query};
 use failure;
 use futures::{prelude::*, Future};
+use r53::Name;
+use std::fs;
 use std::sync::{Arc, RwLock};
 
 #[derive(Clone)]
@@ -16,39 +18,23 @@ pub struct AuthFuture {
 
 impl AuthServer {
     pub fn new(conf: &AuthorityConfig) -> Self {
+        let mut zones = AuthZone::new();
+        for zone_conf in conf.zones.iter() {
+            let zone_cotent = fs::read_to_string(&zone_conf.file_path).unwrap();
+            zones
+                .add_zone(Name::new(&zone_conf.name).unwrap(), &zone_cotent)
+                .unwrap();
+        }
         AuthServer {
-            zones: Arc::new(RwLock::new(AuthZone::new())),
+            zones: Arc::new(RwLock::new(zones)),
         }
     }
 
-    pub fn zones(&self) -> Arc<RwLock<AuthZone>> {
-        self.zones.clone()
-    }
-
-    pub fn handle_query(&self, query: Query) -> AuthFuture {
-        AuthFuture::new(self.zones.clone(), query)
-    }
-}
-
-impl AuthFuture {
-    pub fn new(zones: Arc<RwLock<AuthZone>>, query: Query) -> Self {
-        AuthFuture {
-            query: Some(query),
-            zones,
-        }
-    }
-}
-
-impl Future for AuthFuture {
-    type Item = Query;
-    type Error = failure::Error;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+    pub fn handle_query(&self, mut query: Query) -> Query {
         let zones = self.zones.read().unwrap();
-        let query = self.query.as_mut().unwrap();
         if zones.handle_query(&mut query.message) {
             query.done = true;
         }
-        return Ok(Async::Ready(self.query.take().unwrap()));
+        query
     }
 }

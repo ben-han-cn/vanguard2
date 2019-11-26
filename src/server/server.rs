@@ -1,22 +1,24 @@
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
-use super::{handler::QueryHandler, tcp_server::TcpServer, udp_server::UdpServer};
+use super::{tcp_server::TcpServer, udp_server::UdpServer};
 use crate::config::ServerConfig;
 use futures::{future, Future};
 use tokio::executor::spawn;
 
-pub struct Server<S: QueryHandler> {
+pub struct Server {
     addr: SocketAddr,
-    handler: S,
 }
 
-impl<S: QueryHandler + 'static> Server<S> {
+impl Server {
     pub fn new(conf: &ServerConfig, handler: S) -> Self {
         let addr = conf.address.parse().unwrap();
         Server { addr, handler }
     }
 
-    pub fn into_future(self) -> impl Future<Item = (), Error = ()> + Send + 'static {
+    pub async fn run<F>(&self, f: F) 
+    where
+        F: FnMut(Query) -> Future<Output = (Query)> + Send,
+    {
         let handler = Arc::new(self.handler);
         let addr = self.addr;
         future::lazy(move || {

@@ -1,18 +1,26 @@
-extern crate futures;
-extern crate tokio;
-mod resolver;
-
 use clap::{App, Arg};
-use metrics::start_metric_server;
 use std::net::SocketAddr;
-use std::thread;
-use tokio::runtime::current_thread;
+use tokio::prelude::*;
 
-use vanguard2::auth::{AuthServer, DynamicUpdateHandler};
+use vanguard2::auth::AuthServer;
 use vanguard2::config::VanguardConfig;
-use vanguard2::server::{start_qps_calculate, Server};
+use vanguard2::server::{Query, QueryCoder};
+use vanguard2::error::VgError;
+use r53::{MessageRender, Message};
 
-fn main() {
+use tokio::net::{UdpFramed, UdpSocket};
+use tokio::prelude::*;
+use tokio::future::FutureExt as TokioFutureExt;
+use failure::Error;
+use futures::channel::mpsc::{channel, Receiver, Sender};
+use futures::stream::{self, Stream, TryStreamExt};
+use futures::{FutureExt, SinkExt, StreamExt};
+
+const MAX_QUERY_MESSAGE_LEN :usize = 512;
+const QUERY_BUFFER_LEN :usize = 512;
+
+#[tokio::main]
+async fn main() -> Result<(), Error> {
     let matches = App::new("auth")
         .arg(
             Arg::with_name("config")
@@ -24,43 +32,30 @@ fn main() {
         .get_matches();
 
     let config_file = matches.value_of("config").unwrap_or("vanguard.conf");
+    let config = VanguardConfig::load_config(config_file)?; 
+    let auth_server = AuthServer::new(&config.auth);
+    let addr = config.server.address;
+    let socket = UdpSocket::bind(&addr).await?;
+    let (mut send_stream, mut recv_stream) = UdpFramed::new(socket, QueryCoder::new()).split();
+    let (sender, mut receiver) = channel::<Query>(QUERY_BUFFER_LEN);
+    tokio::spawn(async move {
+        loop {
+            let resp = receiver.next().await.unwrap();
+            send_stream.send((resp.message, resp.client)).await;
+        };
+    });
 
-    match VanguardConfig::load_config(config_file) {
-        Err(e) => {
-            eprintln!("load configure file failed: {:?}", e);
-            return;
-        }
-        Ok(config) => {
-            let auth_server = AuthServer::new(&config.auth);
-            let dynamic_server = DynamicUpdateHandler::new(auth_server.zones());
-            let resolver = resolver::Resolver::new(auth_server, &config);
-            let server = Server::new(&config.server, resolver);
-
-            let addr_and_port = config.vg_ctrl.address.split(":").collect::<Vec<&str>>();
-            let _handler = dynamic_server.run(
-                addr_and_port[0].to_string(),
-                addr_and_port[1].parse().unwrap(),
-            );
-
-            let addr = config.metrics.address.parse::<SocketAddr>().unwrap();
-            start_metrics(addr);
-
-            tokio::run(server.into_future());
+    loop {
+        if let Some(Ok((message, src))) = recv_stream.next().await {
+            let query = Query::new(message, src);
+            let mut sender_back = sender.clone();
+            let auth_server = auth_server.clone();
+            tokio::spawn(async move {
+                let resp = auth_server.handle_query(query);
+                if resp.done {
+                    sender_back.try_send(resp);
+                }
+            });
         }
     }
-}
-
-fn start_metrics(addr: SocketAddr) {
-    thread::Builder::new()
-        .name("metrics".into())
-        .spawn(move || {
-            let mut rt = current_thread::Runtime::new().unwrap();
-            rt.spawn(start_metric_server(
-                addr,
-                "/metrics".to_string(),
-                "/statistics".to_string(),
-            ));
-            rt.block_on(start_qps_calculate()).unwrap();
-        })
-        .unwrap();
 }

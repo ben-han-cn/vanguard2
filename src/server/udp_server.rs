@@ -4,23 +4,13 @@ use super::handler::{Query, QueryHandler};
 use futures::{
     future::ok,
     stream::{Fuse, Stream},
-    sync::mpsc::{channel, Receiver, Sender},
+    channel::mpsc::{channel, Receiver, Sender},
     Async, Future, Poll,
 };
-use prometheus::{IntCounter, IntGauge};
 use r53::{Message, MessageRender};
 use tokio::{executor::spawn, net::UdpSocket};
 use tokio_timer::Interval;
 
-const QUERY_BUFFER_LEN: usize = 1024;
-const MAX_QUERY_MESSAGE_LEN: usize = 1024;
-
-lazy_static! {
-    static ref QPS_UDP_INT_GAUGE: IntGauge =
-        register_int_gauge!("pqs", "query per second").unwrap();
-    static ref QC_UDP_INT_COUNT: IntCounter =
-        register_int_counter!("qc", "query count until now").unwrap();
-}
 
 pub struct UdpServer<S: QueryHandler> {
     socket: UdpSocket,
@@ -41,7 +31,13 @@ impl<S: QueryHandler> UdpServer<S> {
         }
     }
 
-    fn send_all_response(&mut self, render: &mut MessageRender) -> Poll<(), io::Error> {
+    pub async fn run() -> io::Result<()> {
+        let mut buf = [0u8; MAX_QUERY_MESSAGE_LEN];
+        let mut render = MessageRender::new();
+
+    }
+
+    fn send_all_response(&mut self, render: &mut MessageRender) -> io::Result<()> {
         loop {
             match self.response_ch.poll() {
                 Ok(Async::Ready(Some(query))) => {
