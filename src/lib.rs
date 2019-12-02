@@ -4,6 +4,10 @@ extern crate futures;
 extern crate lazy_static;
 
 pub mod auth;
+pub mod cache;
 pub mod config;
 pub mod error;
+pub mod forwarder;
+pub mod nameserver;
 pub mod server;
+pub mod types;

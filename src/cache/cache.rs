@@ -1,5 +1,5 @@
 use super::message_cache::MessageLruCache;
-use crate::recursor::message_classifier::ResponseCategory;
+use crate::types::ResponseCategory;
 use r53::{Message, Name, RRType, RRset};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]

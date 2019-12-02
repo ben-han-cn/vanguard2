@@ -2,7 +2,7 @@ use std::{io, net::SocketAddr};
 
 use bytes::BytesMut;
 use r53::{Message, MessageRender};
-use tokio::codec::{Decoder, Encoder};
+use tokio_util::codec::{Decoder, Encoder};
 
 pub struct QueryCoder {
     render: MessageRender,

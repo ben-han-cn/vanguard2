@@ -1,5 +1,5 @@
 use super::zones::AuthZone;
-use crate::{config::AuthorityConfig, server::Query};
+use crate::{config::AuthorityConfig, types::Query};
 use failure;
 use futures::{prelude::*, Future};
 use r53::Name;

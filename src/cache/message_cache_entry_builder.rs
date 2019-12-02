@@ -3,6 +3,7 @@ use super::{
     message_util::{get_rrset_trust_level, is_negative_response},
     rrset_cache::RRsetLruCache,
 };
+use crate::types::ResponseCategory;
 use r53::{
     header_flag::HeaderFlag, message::SectionType, Message, MessageBuilder, Name, RRTtl, RRType,
     RRset,

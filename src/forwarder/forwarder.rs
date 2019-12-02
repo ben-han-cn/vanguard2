@@ -1,4 +1,4 @@
-use crate::recursor::util::Nameserver;
+use crate::nameserver::Nameserver;
 use std::{
     cmp::{Eq, Ord, Ordering, PartialEq, PartialOrd},
     net::SocketAddr,
