@@ -5,149 +5,64 @@ use crate::recursor::{
         nameserver_cache::{self, Nameserver, NameserverCache},
         zone_cache::ZoneCache,
     },
-    recursor::Resolver,
-    running_query::RunningQuery,
-    Recursor,
+    resolver::Resolver,
 };
 use failure::{self, Result};
 use futures::{future, prelude::*, Future};
 use lru::LruCache;
 use r53::{Message, Name, RRType};
 use std::{
-    io, mem,
     sync::{Arc, Mutex},
 };
 
-enum FetcherState<F> {
-    FetchNS(Name, Box<F>),
-    FetchAddress(Name, Box<F>, Vec<Name>),
-    Poisoned,
-}
-
-pub struct ZoneFetcher<R: Resolver> {
-    state: FetcherState<R::Query>,
+pub async fn fetch_zone<R: Resolver>(
+    mut zone: Name,
     resolver: R,
     nameservers: Arc<Mutex<NameserverCache>>,
     zones: Arc<Mutex<ZoneCache>>,
-    depth: usize,
-}
-
-impl<R: Resolver> ZoneFetcher<R> {
-    pub fn new(
-        zone: Name,
-        resolver: R,
-        nameservers: Arc<Mutex<NameserverCache>>,
-        zones: Arc<Mutex<ZoneCache>>,
-        depth: usize,
-    ) -> Self {
-        let zone_copy = zone.clone();
-        ZoneFetcher {
-            state: FetcherState::FetchNS(
-                zone,
-                Box::new(resolver.new_query(Message::with_query(zone_copy, RRType::NS), depth + 1)),
-            ),
-            resolver,
-            nameservers,
-            zones,
-            depth,
-        }
-    }
-}
-
-impl<R: Resolver> Future for ZoneFetcher<R> {
-    type Item = Nameserver;
-    type Error = failure::Error;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        loop {
-            match mem::replace(&mut self.state, FetcherState::Poisoned) {
-                FetcherState::FetchNS(zone, mut fut) => match fut.poll() {
-                    Err(e) => {
-                        return Err(e);
-                    }
-                    Ok(Async::NotReady) => {
-                        self.state = FetcherState::FetchNS(zone, fut);
-                        return Ok(Async::NotReady);
-                    }
-                    Ok(Async::Ready(msg)) => {
-                        if let Ok((zone_entry, nameserver_entries)) =
-                            message_to_zone_entry(&zone, msg)
-                        {
-                            if let Some(nameserver_entries) = nameserver_entries {
-                                {
-                                    let mut zones = self.zones.lock().unwrap();
-                                    zones.add_zone(zone_entry);
-                                }
-                                let nameserver =
-                                    nameserver_cache::select_from_nameservers(&nameserver_entries);
-                                let mut nameservers = self.nameservers.lock().unwrap();
-                                for nameserver_entry in nameserver_entries {
-                                    nameservers.add_nameserver(nameserver_entry);
-                                }
-                                return Ok(Async::Ready(nameserver));
-                            } else {
-                                let (nameserver, mut missing_names) = {
-                                    let mut nameservers = self.nameservers.lock().unwrap();
-                                    zone_entry.select_nameserver(&mut nameservers)
-                                };
-                                {
-                                    let mut zones = self.zones.lock().unwrap();
-                                    zones.add_zone(zone_entry);
-                                }
-                                if let Some(nameserver) = nameserver {
-                                    return Ok(Async::Ready(nameserver));
-                                }
-
-                                debug_assert!(!missing_names.is_empty());
-                                let name = missing_names.pop().unwrap();
-                                let fut = Box::new(self.resolver.new_query(
-                                    Message::with_query(name.clone(), RRType::A),
-                                    self.depth + 1,
-                                ));
-                                self.state = FetcherState::FetchAddress(name, fut, missing_names);
-                            }
-                        } else {
-                            return Err(error::NSASError::InvalidNSResponse(
-                                "not valid ns response".to_string(),
-                            )
-                            .into());
-                        }
-                    }
-                },
-                FetcherState::FetchAddress(current_name, mut fut, mut names) => {
-                    match fut.poll() {
-                        Err(e) => {
-                            println!("fetch {:?} failed {:?}", current_name, e);
-                        }
-                        Ok(Async::NotReady) => {
-                            self.state = FetcherState::FetchAddress(current_name, fut, names);
-                            return Ok(Async::NotReady);
-                        }
-                        Ok(Async::Ready(msg)) => {
-                            if let Ok(entry) =
-                                message_to_nameserver_entry(current_name.clone(), msg)
-                            {
-                                let nameserver = entry.select_nameserver();
-                                self.nameservers.lock().unwrap().add_nameserver(entry);
-                                return Ok(Async::Ready(nameserver));
-                            }
-                        }
-                    }
-
-                    if names.is_empty() {
-                        return Err(error::NSASError::NoValidNameserver.into());
-                    }
-
-                    let current_name = names.pop().unwrap();
-                    let fut = Box::new(self.resolver.new_query(
-                        Message::with_query(current_name.clone(), RRType::A),
-                        self.depth + 1,
-                    ));
-                    self.state = FetcherState::FetchAddress(current_name, fut, names);
-                }
-                FetcherState::Poisoned => panic!("zone fetcher state panic inside pool"),
+    ) -> failure::Result<Nameserver> {
+    let response = resolver.handle_query(Message::with_query(zone.clone(), RRType::NS)).await?;
+    if let Ok((zone_entry, nameserver_entries)) = message_to_zone_entry(&zone, response) {
+        if let Some(nameserver_entries) = nameserver_entries {
+            {
+                let mut zones = zones.lock().unwrap();
+                zones.add_zone(zone_entry);
             }
+            let nameserver =
+                nameserver_cache::select_from_nameservers(&nameserver_entries);
+            let mut nameservers = nameservers.lock().unwrap();
+            for nameserver_entry in nameserver_entries {
+                nameservers.add_nameserver(nameserver_entry);
+            }
+            return Ok(nameserver);
+        } else {
+            let (nameserver, mut missing_names) = {
+                let mut nameservers = nameservers.lock().unwrap();
+                zone_entry.select_nameserver(&mut nameservers)
+            };
+            {
+                let mut zones = zones.lock().unwrap();
+                zones.add_zone(zone_entry);
+            }
+            if let Some(nameserver) = nameserver {
+                return Ok(nameserver);
+            }
+
+            debug_assert!(missing_names.is_some());
+            let missing_names = missing_names.unwrap();
+            for name in missing_names {
+                if let Ok(response) = resolver.handle_query(Message::with_query(name.clone(), RRType::A)).await {
+                    if let Ok(entry) = message_to_nameserver_entry(name, response) {
+                        let nameserver = entry.select_nameserver();
+                        nameservers.lock().unwrap().add_nameserver(entry);
+                        return Ok(nameserver);
+                    }
+                }
+            }
+            return Err(error::NSASError::NoValidNameserver.into());
         }
+    } else {
+        return Err(error::NSASError::InvalidNSResponse( "not valid ns response".to_string()).into());
     }
 }
 
@@ -180,18 +95,15 @@ mod test {
 
         let nameservers = Arc::new(Mutex::new(NameserverCache(LruCache::new(100))));
         let zones = Arc::new(Mutex::new(ZoneCache(LruCache::new(100))));
-
-        let fetcher = ZoneFetcher::new(
-            Name::new("knet.cn").unwrap(),
-            resolver,
-            nameservers.clone(),
-            zones.clone(),
-            0,
-        );
         assert_eq!(nameservers.lock().unwrap().len(), 0);
 
         let mut rt = Runtime::new().unwrap();
-        let select_nameserver = rt.block_on(fetcher).unwrap();
+        let select_nameserver = rt.block_on(fetch_zone(
+                Name::new("knet.cn").unwrap(),
+                resolver,
+                nameservers.clone(),
+                zones.clone(),
+                )).unwrap();
         assert_eq!(select_nameserver.name, Name::new("ns1.knet.cn").unwrap());
         assert_eq!(select_nameserver.address, Ipv4Addr::new(1, 1, 1, 1));
 
@@ -199,6 +111,7 @@ mod test {
         assert_eq!(zones.lock().unwrap().len(), 1);
     }
 
+    #[test]
     fn test_fetch_without_glue() {
         let mut resolver = DumbResolver::new();
         resolver.set_answer(
@@ -224,20 +137,16 @@ mod test {
 
         let nameservers = Arc::new(Mutex::new(NameserverCache(LruCache::new(100))));
         let zones = Arc::new(Mutex::new(ZoneCache(LruCache::new(100))));
-        let fetcher = ZoneFetcher::new(
-            Name::new("knet.cn").unwrap(),
-            resolver,
-            nameservers.clone(),
-            zones.clone(),
-            0,
-        );
-
         let mut rt = Runtime::new().unwrap();
-        let select_nameserver = rt.block_on(fetcher).unwrap();
+        let select_nameserver = rt.block_on(fetch_zone(
+                Name::new("knet.cn").unwrap(),
+                resolver,
+                nameservers.clone(),
+                zones.clone(),
+                )).unwrap();
 
         assert_eq!(select_nameserver.name, Name::new("ns3.knet.com").unwrap());
         assert_eq!(select_nameserver.address, Ipv4Addr::new(1, 1, 1, 1));
-
         assert_eq!(nameservers.lock().unwrap().len(), 1);
         assert_eq!(zones.lock().unwrap().len(), 1);
     }

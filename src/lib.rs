@@ -9,5 +9,6 @@ pub mod config;
 pub mod error;
 pub mod forwarder;
 pub mod nameserver;
+pub mod recursor;
 pub mod server;
 pub mod types;

@@ -5,7 +5,7 @@ use super::{
 use crate::{
     types::Query,
     config::ForwarderConfig,
-    nameserver::{Nameserver, NameserverStore, Sender},
+    nameserver::{Nameserver, NameserverStore, send_query},
 };
 use failure;
 use domaintree::DomainTree;
@@ -34,26 +34,21 @@ impl ForwarderManager {
         }
     }
 
-    pub async fn handle_query(&self, mut query: Query) -> Result<Query, failure::Error> {
-        if let Some(forwarder) = self.select_nameserver(&query) {
-            let question = &query.message.question.unwrap();
+    pub async fn handle_query(&self, query: &Query) -> Result<Option<Message>, failure::Error> {
+        if let Some(forwarder) = self.select_nameserver(query) {
+            let question = query.question();
             let mut tmp_query = Message::with_query(question.name.clone(), question.typ);
             tmp_query.header.set_flag(r53::HeaderFlag::RecursionDesired, true);
-            let mut sender = Sender::new(tmp_query, forwarder, self.clone());
-            let mut response = sender.send_query().await?;
-            response.header.id = query.message.header.id;
-            query.message = response;
-            query.done = true;
+            let mut response = send_query(tmp_query, forwarder, self.clone()).await?;
+            response.header.id = query.request().header.id;
+            Ok(Some(response))
+        } else {
+            Ok(None)
         }
-        Ok(query)
     }
-}
-
-impl NameserverStore for ForwarderManager {
-    type Nameserver = Forwarder;
 
     fn select_nameserver(&self, query: &Query) -> Option<Forwarder> {
-        let result = self.forwarders.find(&query.message.question.as_ref().unwrap().name);
+        let result = self.forwarders.find(&query.question().name);
         if let Some(selecotr) = result.get_value() {
             let pool = self.pool.read().unwrap();
             return Some(selecotr.select_forwarder(&pool));
@@ -61,6 +56,10 @@ impl NameserverStore for ForwarderManager {
             return None;
         }
     }
+}
+
+impl NameserverStore for ForwarderManager {
+    type Nameserver = Forwarder;
 
     fn update_nameserver_rtt(&self, forwarder: &Forwarder) {
         let mut pool = self.pool.write().unwrap();

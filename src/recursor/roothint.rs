@@ -1,4 +1,4 @@
-use super::{MessageCache, RRsetTrustLevel};
+use crate::cache::{MessageCache, RRsetTrustLevel};
 use r53::{Message, Name, RData, RRType, RRset};
 use std::str::FromStr;
 

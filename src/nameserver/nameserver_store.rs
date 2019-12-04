@@ -12,6 +12,5 @@ pub trait Nameserver {
 pub trait NameserverStore {
     type Nameserver: Nameserver;
 
-    fn select_nameserver(&self, query: &Query) -> Option<Self::Nameserver>;
     fn update_nameserver_rtt(&self, nameserver: &Self::Nameserver);
 }

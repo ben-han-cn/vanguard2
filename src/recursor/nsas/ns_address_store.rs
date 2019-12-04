@@ -1,15 +1,14 @@
+use crate::nameserver::NameserverStore;
 use crate::recursor::{
     nsas::{
         address_entry,
         entry_key::EntryKey,
         nameserver_cache::{self, Nameserver, NameserverCache},
-        nameserver_fetcher::NameserverFetcher,
+        nameserver_fetcher::fetch_nameserver,
         zone_cache::ZoneCache,
-        zone_fetcher::ZoneFetcher,
+        zone_fetcher::fetch_zone,
     },
-    recursor::Resolver,
-    util::NameserverStore,
-    Recursor,
+    resolver::Resolver,
 };
 use failure;
 use futures::{future, prelude::*, Future};
@@ -19,7 +18,6 @@ use std::{
     collections::HashSet,
     sync::{Arc, Mutex},
 };
-use tokio::executor::spawn;
 
 const DEFAULT_ZONE_ENTRY_CACHE_SIZE: usize = 1009;
 const DEFAULT_NAMESERVER_ENTRY_CACHE_SIZE: usize = 3001;
@@ -29,6 +27,9 @@ const MAX_PROBING_NAMESERVER_COUNT: usize = 1000;
 pub struct NSAddressStore {
     nameservers: Arc<Mutex<NameserverCache>>,
     zones: Arc<Mutex<ZoneCache>>,
+    //some ns in authority section, maynot have related
+    //glue in additional section, we will try to fetch
+    //their address in back ground
     probing_name_servers: Arc<Mutex<HashSet<Name>>>,
 }
 
@@ -51,47 +52,52 @@ impl NSAddressStore {
     pub fn get_nameserver(
         &self,
         zone: &Name,
-        resolver: &Recursor,
-    ) -> (
-        Option<Nameserver>,
-        Option<Box<dyn Future<Item = (), Error = ()> + Send>>,
-    ) {
+    ) -> (Option<Nameserver>, Option<Vec<Name>>) {
         let key = &EntryKey::from_name(zone);
-        let (nameserver, missing_nameserver) = self
-            .zones
+        let (nameserver, missing_nameserver) = self.zones
             .lock()
             .unwrap()
             .get_nameserver(key, &mut self.nameservers.lock().unwrap());
-        (
-            nameserver,
-            self.probe_nameservers(missing_nameserver, resolver),
-        )
+
+        (nameserver, if missing_nameserver.is_none() {
+            None
+        } else {
+            self.missing_server_to_probe(missing_nameserver.unwrap()) 
+        })
     }
 
-    pub fn fetch_zone(
+    pub async fn probe_missing_nameserver<R: Resolver + Send>(
+        self,
+        missing_nameserver: Vec<Name>,
+        resolver: R
+    ) {
+        println!(
+            "start to probe {:?}, waiting queue len is {}",
+            missing_nameserver,
+            self.probing_name_servers.lock().unwrap().len()
+        );
+
+        fetch_nameserver(missing_nameserver.clone(), self.nameservers.clone(), resolver).await;
+
+        let mut probing_name_servers = self.probing_name_servers.lock().unwrap();
+        missing_nameserver.into_iter().for_each(|n| {
+            probing_name_servers.remove(&n);
+        });
+    }
+
+    pub async fn fetch_nameserver<R: Resolver>(
         &self,
         zone: Name,
-        depth: usize,
-        resolver: Recursor,
-    ) -> ZoneFetcher<Recursor> {
-        return ZoneFetcher::new(
-            zone,
-            resolver,
-            self.nameservers.clone(),
-            self.zones.clone(),
-            depth,
-        );
+        resolver: R) -> failure::Result<Nameserver> {
+        fetch_zone(zone, resolver, self.nameservers.clone(), self.zones.clone()).await
     }
 
-    fn probe_nameservers(
+    fn missing_server_to_probe(
         &self,
         missing_nameserver: Vec<Name>,
-        resolver: &Recursor,
-    ) -> Option<Box<dyn Future<Item = (), Error = ()> + Send>> {
-        if missing_nameserver.is_empty()
-            || self.probing_name_servers.lock().unwrap().len() >= MAX_PROBING_NAMESERVER_COUNT
-        {
-            return None;
+    ) -> Option<Vec<Name>>{
+        if self.probing_name_servers.lock().unwrap().len() >= MAX_PROBING_NAMESERVER_COUNT {
+            return None
         }
 
         let missing_nameserver = {
@@ -108,33 +114,17 @@ impl NSAddressStore {
         };
 
         if missing_nameserver.is_empty() {
-            return None;
+            None
+        } else {
+            Some(missing_nameserver)
         }
-
-        println!(
-            "start to probe {:?}, waiting queue len is {}",
-            missing_nameserver,
-            self.probing_name_servers.lock().unwrap().len()
-        );
-        let probing_name_servers = self.probing_name_servers.clone();
-        let done_nameserver = missing_nameserver.clone();
-        return Some(Box::new(
-            NameserverFetcher::new(
-                missing_nameserver,
-                self.nameservers.clone(),
-                resolver.clone(),
-            )
-            .map(move |_| {
-                let mut probing_name_servers = probing_name_servers.lock().unwrap();
-                done_nameserver.into_iter().for_each(|n| {
-                    probing_name_servers.remove(&n);
-                });
-            }),
-        ));
     }
+
 }
 
-impl NameserverStore<Nameserver> for NSAddressStore {
+impl NameserverStore for NSAddressStore {
+    type Nameserver = nameserver_cache::Nameserver;
+
     fn update_nameserver_rtt(&self, nameserver: &Nameserver) {
         let mut nameservers = self.nameservers.lock().unwrap();
         let key = &EntryKey::from_name(&nameserver.name);

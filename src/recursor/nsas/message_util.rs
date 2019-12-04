@@ -1,10 +1,8 @@
-use crate::recursor::{
-    message_classifier::{classify_response, ResponseCategory},
-    nsas::{
-        address_entry::AddressEntry, error::NSASError, nameserver_cache::NameserverEntry,
-        zone_cache::ZoneEntry,
-    },
+use crate::recursor::nsas::{
+    address_entry::AddressEntry, error::NSASError, nameserver_cache::NameserverEntry,
+    zone_cache::ZoneEntry,
 };
+use crate::types::{classify_response, ResponseCategory};
 use failure::Result;
 use r53::{message::SectionType, Message, Name, RData, RRType, RRset};
 use std::{net::IpAddr, time::Duration};

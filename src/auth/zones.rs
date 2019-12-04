@@ -2,6 +2,7 @@ use crate::auth::error::AuthError;
 use crate::auth::memory_zone::MemoryZone;
 use crate::auth::zone::{FindOption, FindResult, FindResultType, ZoneFinder};
 use crate::auth::zone_loader::load_zone;
+use crate::types::Query;
 use domaintree::{DomainTree, FindResultFlag};
 use failure::Result;
 use r53::{HeaderFlag, Message, MessageBuilder, Name, RRType, Rcode};
@@ -37,20 +38,19 @@ impl AuthZone {
         Ok(())
     }
 
-    pub fn handle_query(&self, req: &mut Message) -> bool {
-        let question = req.question.as_ref().unwrap();
+    pub fn handle_query(&self, query: &Query) -> Option<Message> {
+        let question = query.question();
         let zone = self.get_zone(&question.name);
         if zone.is_none() {
-            //let mut builder = MessageBuilder::new(req);
-            //builder.make_response().rcode(Rcode::Refused).done();
-            return false;
+            return None;
         }
 
         let zone = zone.unwrap();
         let mut result = zone.find(&question.name, question.typ, FindOption::FollowZoneCut);
 
         let query_type = question.typ;
-        let mut builder = MessageBuilder::new(req);
+        let mut response = query.request().clone();
+        let mut builder = MessageBuilder::new(&mut response);
         builder.make_response().set_flag(HeaderFlag::AuthAnswer);
         match result.typ {
             FindResultType::CName => {
@@ -89,7 +89,7 @@ impl AuthZone {
             }
         }
         builder.done();
-        true
+        Some(response)
     }
 
     pub fn get_zone<'a>(&'a self, name: &Name) -> Option<&'a MemoryZone> {

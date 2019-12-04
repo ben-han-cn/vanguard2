@@ -1,25 +1,17 @@
 use super::{
-    forwarder::{Forwarder, ForwarderManager},
-    message_classifier::{classify_response, ResponseCategory},
-    nsas::{NSAddressStore, Nameserver, NameserverFuture},
-    recursor::{Recursor, Resolver},
-    util::Sender,
+    nsas::{NSAddressStore, Nameserver},
+    recursor::{Recursor},
+    resolver::Resolver,
 };
 use crate::error::VgError;
+use crate::nameserver::{send_query};
+use crate::types::{classify_response, ResponseCategory};
 use failure;
 use futures::{future, prelude::*, Future};
 use r53::{message::SectionType, name, Message, MessageBuilder, Name, RData, RRType, Rcode};
 use std::{mem, time::Duration};
 
 const MAX_CNAME_DEPTH: usize = 12;
-
-enum State {
-    Init,
-    Forward(Sender<Forwarder, ForwarderManager>),
-    GetNameServer(NameserverFuture),
-    QueryAuthServer(Sender<Nameserver, NSAddressStore>),
-    Poisoned,
-}
 
 pub struct RunningQuery {
     current_name: Name,
@@ -28,13 +20,11 @@ pub struct RunningQuery {
     cname_depth: usize,
     response: Option<Message>,
     recursor: Recursor,
-    state: State,
-    depth: usize,
 }
 
 impl RunningQuery {
-    pub fn new(query: Message, recursor: Recursor, depth: usize) -> Self {
-        let question = query.question.as_ref().unwrap();
+    pub fn new(request: Message, recursor: Recursor) -> Self {
+        let question = request.question.as_ref().unwrap();
         let current_name = question.name.clone();
         let current_type = question.typ;
 
@@ -43,10 +33,8 @@ impl RunningQuery {
             current_type,
             current_zone: None,
             cname_depth: 0,
-            response: Some(query),
+            response: Some(request),
             recursor,
-            state: State::Init,
-            depth,
         }
     }
 
@@ -60,18 +48,15 @@ impl RunningQuery {
         self.current_type = question.typ;
         self.current_zone = None;
         self.cname_depth = 0;
-        self.state = State::Init;
-        self.depth = 0;
     }
 
     fn lookup_in_cache(&mut self) -> Option<Message> {
-        let mut current_query = Message::with_query(self.current_name.clone(), self.current_type);
+        let current_query = Message::with_query(self.current_name.clone(), self.current_type);
 
         let cache = self.recursor.cache.clone();
         let mut cache = cache.lock().unwrap();
-        let found_in_cache = cache.gen_response(&mut current_query);
-        if found_in_cache {
-            let response = self.make_response(current_query);
+        if let Some(response)= cache.gen_response(&current_query) {
+            let response = self.make_response(response);
             let origin_query_name = &response.question.as_ref().unwrap().name;
             if !origin_query_name.eq(&self.current_name) {
                 let response_type =
@@ -194,101 +179,42 @@ impl RunningQuery {
         }
         return false;
     }
-}
 
-impl Future for RunningQuery {
-    type Item = Message;
-    type Error = failure::Error;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+    pub async fn handle_query(mut self) -> failure::Result<Message> {
         loop {
-            match mem::replace(&mut self.state, State::Poisoned) {
-                State::Init => match self.lookup_in_cache() {
-                    None => {
-                        if let Some(fut) = self
-                            .recursor
-                            .forwarder
-                            .handle_query(&self.current_name, self.current_type)
-                        {
-                            self.state = State::Forward(fut);
-                        } else {
-                            match NameserverFuture::new(
-                                self.current_zone.as_ref().unwrap().clone(),
-                                &self.recursor,
-                                &self.recursor.nsas,
-                                self.depth,
-                            ) {
-                                Ok(fut) => {
-                                    self.state = State::GetNameServer(fut);
-                                }
-                                Err(e) => {
-                                    return Err(e);
-                                }
-                            }
-                        }
-                    }
-                    Some(resp) => {
-                        return Ok(Async::Ready(resp));
-                    }
-                },
-                State::Forward(mut sender) => match sender.poll() {
+            if let Some(response) = self.lookup_in_cache() {
+                return Ok(response);
+            }
+
+            let nameserver = {
+                let (nameserver, missing_nameserver) = self.recursor.nsas.get_nameserver(&self.current_zone.as_ref().unwrap());
+                if missing_nameserver.is_some() {
+                    let nsas = self.recursor.nsas.clone();
+                    let resolver = self.recursor.clone();
+                    tokio::spawn(nsas.probe_missing_nameserver(missing_nameserver.unwrap(), resolver));
+                }
+                if nameserver.is_some() {
+                    nameserver.unwrap()
+                } else {
+                    self.recursor.nsas.fetch_nameserver(self.current_zone.as_ref().unwrap().clone(),
+                    self.recursor.clone(),
+                    ).await?
+                }
+            };
+
+            if let Ok(response) = send_query(
+                Message::with_query(self.current_name.clone(), self.current_type),
+                nameserver,
+                self.recursor.nsas.clone(),
+                ).await {
+                match self.handle_response(response) {
                     Err(e) => {
                         return Err(e);
                     }
-                    Ok(Async::NotReady) => {
-                        self.state = State::Forward(sender);
-                        return Ok(Async::NotReady);
+                    Ok(Some(response)) => {
+                        return Ok(response);
                     }
-                    Ok(Async::Ready(resp)) => match self.handle_response(resp) {
-                        Err(e) => {
-                            return Err(e);
-                        }
-                        Ok(Some(resp)) => {
-                            return Ok(Async::Ready(resp));
-                        }
-                        Ok(none) => {
-                            self.state = State::Init;
-                        }
-                    },
-                },
-                State::GetNameServer(mut fetcher) => match fetcher.poll() {
-                    Err(e) => {
-                        return Err(e);
-                    }
-                    Ok(Async::NotReady) => {
-                        self.state = State::GetNameServer(fetcher);
-                        return Ok(Async::NotReady);
-                    }
-                    Ok(Async::Ready(nameserver)) => {
-                        self.state = State::QueryAuthServer(Sender::new(
-                            Message::with_query(self.current_name.clone(), self.current_type),
-                            nameserver,
-                            self.recursor.nsas.clone(),
-                        ));
-                    }
-                },
-                State::QueryAuthServer(mut sender) => match sender.poll() {
-                    Err(e) => {
-                        return Err(VgError::TimerErr(format!("{:?}", e)).into());
-                    }
-                    Ok(Async::NotReady) => {
-                        self.state = State::QueryAuthServer(sender);
-                        return Ok(Async::NotReady);
-                    }
-                    Ok(Async::Ready(resp)) => match self.handle_response(resp) {
-                        Err(e) => {
-                            return Err(e);
-                        }
-                        Ok(Some(resp)) => {
-                            return Ok(Async::Ready(resp));
-                        }
-                        Ok(none) => {
-                            self.state = State::Init;
-                        }
-                    },
-                },
-                State::Poisoned => {
-                    panic!("running query state is corrupted");
+                    _ =>{}
                 }
             }
         }

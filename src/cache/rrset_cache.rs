@@ -30,10 +30,11 @@ impl RRsetLruCache {
         }
     }
 
-    pub fn gen_response(&mut self, key: &EntryKey, message: &mut Message) -> bool {
+    pub fn gen_response(&mut self, key: &EntryKey, req: &Message) -> Option<Message> {
         match self.get_rrset_with_key(key) {
             Some(rrset) => {
-                let mut builder = MessageBuilder::new(message);
+                let mut response = req.clone();
+                let mut builder = MessageBuilder::new(&mut response);
                 builder
                     .make_response()
                     .set_flag(HeaderFlag::RecursionAvailable);
@@ -54,9 +55,9 @@ impl RRsetLruCache {
                     }
                 }
                 builder.add_answer(rrset).done();
-                true
+                Some(response)
             }
-            None => false,
+            None => None,
         }
     }
 

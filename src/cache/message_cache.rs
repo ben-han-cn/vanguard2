@@ -38,17 +38,17 @@ impl MessageLruCache {
         };
     }
 
-    pub fn gen_response(&mut self, query: &mut Message) -> bool {
-        let question = &query.question.as_ref().unwrap();
+    pub fn gen_response(&mut self, request: &Message) -> Option<Message> {
+        let question = request.question.as_ref().unwrap();
         let key = &EntryKey(&question.name as *const Name, question.typ);
         if let Some(entry) = self.messages.get(key) {
-            let succeed = entry.fill_message(query, &mut self.rrset_cache);
-            if !succeed {
+            let response = entry.gen_response(request, &mut self.rrset_cache);
+            if response.is_none() {
                 self.messages.pop(key);
             }
-            succeed
+            response
         } else {
-            self.rrset_cache.gen_response(key, query)
+            self.rrset_cache.gen_response(key, request)
         }
     }
 
@@ -111,27 +111,27 @@ mod tests {
     #[test]
     fn test_message_cache() {
         let mut cache = MessageLruCache::new(100);
-        let mut query = Message::with_query(Name::new("test.example.com.").unwrap(), RRType::A);
-        assert!(!cache.gen_response(&mut query));
+        let query = Message::with_query(Name::new("test.example.com.").unwrap(), RRType::A);
+        assert!(cache.gen_response(&query).is_none());
         cache.add_response(build_positive_response());
-        assert!(cache.gen_response(&mut query));
-        assert_eq!(query.header.rcode, Rcode::NoError);
+        let response = cache.gen_response(&query).unwrap();
+        assert_eq!(response.header.rcode, Rcode::NoError);
         assert!(header_flag::is_flag_set(
-            query.header.flag,
+            response.header.flag,
             header_flag::HeaderFlag::QueryRespone
         ));
         assert!(!header_flag::is_flag_set(
-            query.header.flag,
+            response.header.flag,
             header_flag::HeaderFlag::AuthenticData
         ));
-        assert_eq!(query.header.an_count, 2);
-        let answers = query.section(SectionType::Answer).unwrap();
+        assert_eq!(response.header.an_count, 2);
+        let answers = response.section(SectionType::Answer).unwrap();
         assert_eq!(answers.len(), 1);
         assert_eq!(answers[0].rdatas[0].to_string(), "192.0.2.2");
 
-        let mut query = Message::with_query(Name::new("example.com.").unwrap(), RRType::NS);
-        assert!(cache.gen_response(&mut query));
-        assert_eq!(query.header.an_count, 1);
+        let query = Message::with_query(Name::new("example.com.").unwrap(), RRType::NS);
+        let response = cache.gen_response(&query).unwrap();
+        assert_eq!(response.header.an_count, 1);
 
         let deepest_ns = cache.get_deepest_ns(&Name::new("example.cn.").unwrap());
         assert!(deepest_ns.is_none());

@@ -107,17 +107,18 @@ impl MessageEntry {
         self.expire_time <= Instant::now()
     }
 
-    pub fn fill_message(&self, query: &mut Message, rrset_cache: &mut RRsetLruCache) -> bool {
+    pub fn gen_response(&self, req: &Message, rrset_cache: &mut RRsetLruCache) -> Option<Message> {
         if self.is_expired() {
-            return false;
+            return None;
         }
 
         let rrsets = self.get_rrsets(rrset_cache);
         if rrsets.is_none() {
-            return false;
+            return None;
         }
 
-        let mut builder = MessageBuilder::new(query);
+        let mut response = req.clone();
+        let mut builder = MessageBuilder::new(&mut response);
         builder
             .make_response()
             .set_flag(HeaderFlag::RecursionAvailable);
@@ -133,7 +134,7 @@ impl MessageEntry {
             builder.add_additional(iter.next().unwrap());
         }
         builder.done();
-        true
+        Some(response)
     }
 
     fn get_rrsets(&self, rrset_cache: &mut RRsetLruCache) -> Option<Vec<RRset>> {
@@ -247,19 +248,19 @@ mod tests {
         assert_eq!(entry.rrset_refs.len(), 3);
         assert!(entry.expire_time < Instant::now().checked_add(Duration::from_secs(10)).unwrap());
 
-        let mut query = Message::with_query(Name::new("test.example.com.").unwrap(), RRType::A);
-        assert!(entry.fill_message(&mut query, &mut rrset_cache));
-        assert_eq!(query.header.qd_count, message.header.qd_count);
-        assert_eq!(query.header.an_count, message.header.an_count);
-        assert_eq!(query.header.ns_count, message.header.ns_count);
-        assert_eq!(query.header.ar_count, message.header.ar_count - 1);
+        let query = Message::with_query(Name::new("test.example.com.").unwrap(), RRType::A);
+        let response = entry.gen_response(&query, &mut rrset_cache).unwrap();
+        assert_eq!(response.header.qd_count, message.header.qd_count);
+        assert_eq!(response.header.an_count, message.header.an_count);
+        assert_eq!(response.header.ns_count, message.header.ns_count);
+        assert_eq!(response.header.ar_count, message.header.ar_count - 1);
 
         for section in vec![
             SectionType::Answer,
             SectionType::Authority,
             SectionType::Additional,
         ] {
-            let gen_message_sections = query.section(section).unwrap();
+            let gen_message_sections = response.section(section).unwrap();
             for (i, rrset) in message.section(section).unwrap().iter().enumerate() {
                 assert_eq!(rrset.typ, gen_message_sections[i].typ);
                 assert_eq!(rrset.rdatas, gen_message_sections[i].rdatas);
@@ -287,15 +288,15 @@ mod tests {
         assert!(entry.expire_time < Instant::now().checked_add(Duration::from_secs(30)).unwrap());
         assert!(entry.expire_time > Instant::now().checked_add(Duration::from_secs(20)).unwrap());
 
-        let mut query = Message::with_query(Name::new("test.example.com.").unwrap(), RRType::A);
-        assert!(entry.fill_message(&mut query, &mut rrset_cache));
-        assert_eq!(query.header.qd_count, message.header.qd_count);
-        assert_eq!(query.header.an_count, message.header.an_count);
-        assert_eq!(query.header.ns_count, message.header.ns_count);
-        assert_eq!(query.header.ar_count, message.header.ar_count - 1);
+        let query = Message::with_query(Name::new("test.example.com.").unwrap(), RRType::A);
+        let response = entry.gen_response(&query, &mut rrset_cache).unwrap();
+        assert_eq!(response.header.qd_count, message.header.qd_count);
+        assert_eq!(response.header.an_count, message.header.an_count);
+        assert_eq!(response.header.ns_count, message.header.ns_count);
+        assert_eq!(response.header.ar_count, message.header.ar_count - 1);
 
         for section in vec![SectionType::Authority] {
-            let gen_message_sections = query.section(section).unwrap();
+            let gen_message_sections = response.section(section).unwrap();
             for (i, rrset) in message.section(section).unwrap().iter().enumerate() {
                 assert_eq!(rrset.typ, gen_message_sections[i].typ);
                 assert_eq!(rrset.rdatas, gen_message_sections[i].rdatas);

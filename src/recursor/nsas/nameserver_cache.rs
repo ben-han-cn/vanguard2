@@ -2,7 +2,7 @@ use super::{
     address_entry::{self, AddressEntry},
     entry_key::EntryKey,
 };
-use crate::recursor::util;
+use crate::nameserver;
 use lru::LruCache;
 use r53::Name;
 use std::{
@@ -19,7 +19,7 @@ pub struct Nameserver {
     rtt: Duration,
 }
 
-impl util::Nameserver for Nameserver {
+impl nameserver::Nameserver for Nameserver {
     #[inline]
     fn get_addr(&self) -> SocketAddr {
         SocketAddr::new(self.address, 53)

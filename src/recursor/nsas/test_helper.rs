@@ -1,4 +1,5 @@
-use crate::recursor::{nsas::error::NSASError, recursor::Resolver};
+use crate::recursor::{nsas::error::NSASError, resolver::Resolver};
+use crate::types::Query;
 use failure;
 use futures::{future, Future};
 use r53::{
@@ -7,6 +8,7 @@ use r53::{
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::io::{Error, ErrorKind};
+use std::pin::Pin;
 
 type FackResponse = (Vec<RData>, Vec<RRset>);
 
@@ -48,14 +50,11 @@ impl DumbResolver {
 }
 
 impl Resolver for DumbResolver {
-    type Query = Box<Future<Item = Message, Error = failure::Error> + Send>;
-
-    fn new_query(
+    fn handle_query(
         &self,
-        mut query: Message,
-        _depth: usize,
-    ) -> Box<Future<Item = Message, Error = failure::Error> + Send> {
-        let question = query.question.as_ref().unwrap();
+        request: Message,
+    ) -> Pin<Box<Future<Output = Result<Message, failure::Error>> + Send + 'static>> {
+        let question = request.question.as_ref().unwrap();
         let name = question.name.clone();
         let typ = question.typ;
         match self.responses.get(&Question {
@@ -63,12 +62,13 @@ impl Resolver for DumbResolver {
             typ,
         }) {
             None => {
-                return Box::new(future::err(
+                return Box::pin(future::err(
                     NSASError::InvalidNSResponse("time out".to_string()).into(),
                 ));
             }
             Some((ref answer, ref additional)) => {
-                let mut builder = MessageBuilder::new(&mut query);
+                let mut response = request.clone();
+                let mut builder = MessageBuilder::new(&mut response);
                 builder
                     .make_response()
                     .opcode(Opcode::Query)
@@ -90,7 +90,7 @@ impl Resolver for DumbResolver {
                     builder.add_additional(rrset.clone());
                 }
                 builder.done();
-                return Box::new(future::ok(query));
+                return Box::pin(future::ok(response));
             }
         }
     }

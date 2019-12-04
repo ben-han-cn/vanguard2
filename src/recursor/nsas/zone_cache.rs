@@ -47,16 +47,16 @@ impl ZoneCache {
         &mut self,
         key: &EntryKey,
         nameservers: &mut NameserverCache,
-    ) -> (Option<Nameserver>, Vec<Name>) {
+    ) -> (Option<Nameserver>, Option<Vec<Name>>) {
         if let Some(entry) = self.0.get(key) {
             if entry.is_expired() {
                 self.0.pop(key);
-                return (None, Vec::new());
+                return (None, None);
             } else {
                 return entry.select_nameserver(nameservers);
             }
         } else {
-            return (None, Vec::new());
+            return (None, None);
         }
     }
 
@@ -87,7 +87,7 @@ impl ZoneEntry {
     pub fn select_nameserver(
         &self,
         nameservers: &mut NameserverCache,
-    ) -> (Option<Nameserver>, Vec<Name>) {
+    ) -> (Option<Nameserver>, Option<Vec<Name>>) {
         let mut missing_names = self.nameservers.clone();
         let mut servers = Vec::with_capacity(missing_names.len());
         for i in (0..missing_names.len()).rev() {
@@ -102,6 +102,13 @@ impl ZoneEntry {
                 missing_names.push(name);
             }
         }
+
+        let missing_names = if missing_names.is_empty() {
+            None
+        } else {
+            Some(missing_names)
+        };
+
         if servers.is_empty() {
             (None, missing_names)
         } else {

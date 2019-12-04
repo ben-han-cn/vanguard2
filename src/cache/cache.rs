@@ -33,8 +33,13 @@ impl MessageCache {
         self.positive_cache.len() + self.negative_cache.len()
     }
 
-    pub fn gen_response(&mut self, query: &mut Message) -> bool {
-        self.positive_cache.gen_response(query) || self.negative_cache.gen_response(query)
+    pub fn gen_response(&mut self, request: &Message) -> Option<Message> {
+        let response = self.positive_cache.gen_response(request);
+        if response.is_none() {
+            self.negative_cache.gen_response(request)
+        } else {
+            response
+        }
     }
 
     pub fn add_response(&mut self, response_type: ResponseCategory, response: Message) {

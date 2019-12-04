@@ -2,7 +2,7 @@ use super::zones::AuthZone;
 use crate::{config::AuthorityConfig, types::Query};
 use failure;
 use futures::{prelude::*, Future};
-use r53::Name;
+use r53::{Message, Name};
 use std::fs;
 use std::sync::{Arc, RwLock};
 
@@ -30,11 +30,7 @@ impl AuthServer {
         }
     }
 
-    pub fn handle_query(&self, mut query: Query) -> Query {
-        let zones = self.zones.read().unwrap();
-        if zones.handle_query(&mut query.message) {
-            query.done = true;
-        }
-        query
+    pub fn handle_query(&self, query: &Query) -> Option<Message> {
+        self.zones.read().unwrap().handle_query(query)
     }
 }
