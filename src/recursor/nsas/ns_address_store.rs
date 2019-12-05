@@ -1,7 +1,6 @@
 use crate::nameserver::NameserverStore;
 use crate::recursor::{
     nsas::{
-        address_entry,
         entry_key::EntryKey,
         nameserver_cache::{self, Nameserver, NameserverCache},
         nameserver_fetcher::fetch_nameserver_address,
@@ -11,7 +10,6 @@ use crate::recursor::{
     resolver::Resolver,
 };
 use failure;
-use futures::{future, prelude::*, Future};
 use lru::LruCache;
 use r53::Name;
 use std::{
@@ -102,7 +100,7 @@ impl NSAddressStore {
         }
 
         let missing_nameserver = {
-            let mut unprobe_nameserver = Vec::with_capacity(missing_nameserver.len());
+            let unprobe_nameserver = Vec::with_capacity(missing_nameserver.len());
             let mut probing_name_servers = self.probing_name_servers.lock().unwrap();
             missing_nameserver
                 .into_iter()

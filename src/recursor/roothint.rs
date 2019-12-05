@@ -1,5 +1,5 @@
 use crate::cache::{MessageCache, RRsetTrustLevel};
-use r53::{Message, Name, RData, RRType, RRset};
+use r53::RRset;
 use std::str::FromStr;
 
 const ROOT_SERVERS: [&'static str; 13] = [

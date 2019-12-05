@@ -1,15 +1,10 @@
-use super::{
-    nsas::{NSAddressStore, Nameserver},
-    recursor::{Recursor},
-    resolver::Resolver,
-};
+use super::recursor::Recursor;
 use crate::error::VgError;
 use crate::nameserver::{send_query};
 use crate::types::{classify_response, ResponseCategory};
 use failure;
-use futures::{future, prelude::*, Future};
-use r53::{message::SectionType, name, Message, MessageBuilder, Name, RData, RRType, Rcode};
-use std::{mem, time::Duration};
+use r53::{message::SectionType, name, Message, MessageBuilder, Name, RRType, Rcode};
+use std::time::Duration;
 use tokio::time::timeout;
 
 const MAX_CNAME_DEPTH: usize = 12;
@@ -171,7 +166,7 @@ impl RunningQuery {
         return false;
     }
 
-    pub async fn handle_query(mut self) -> failure::Result<Message> {
+    pub async fn handle_query(self) -> failure::Result<Message> {
         match timeout(RECURSOR_TIMEOUT, self.do_recursive_query()).await {
             Err(e) => 
                 Err(VgError::TimerErr(e.to_string()).into()),

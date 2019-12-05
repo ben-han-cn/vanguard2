@@ -1,7 +1,5 @@
 use super::zones::AuthZone;
 use crate::{config::AuthorityConfig, types::Query};
-use failure;
-use futures::{prelude::*, Future};
 use r53::{Message, Name};
 use std::fs;
 use std::sync::{Arc, RwLock};

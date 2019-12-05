@@ -3,7 +3,7 @@ use super::{
     rrset_cache::RRsetLruCache,
 };
 use lru::LruCache;
-use r53::{Message, Name, RData, RRType, RRset};
+use r53::{Message, Name, RRType, RRset};
 
 const DEFAULT_MESSAGE_CACHE_SIZE: usize = 10000;
 

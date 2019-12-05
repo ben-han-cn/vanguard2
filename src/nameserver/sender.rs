@@ -3,13 +3,11 @@ use crate::error::VgError;
 use failure;
 use r53::{Message, MessageRender};
 use std::{
-    error::Error,
     net::SocketAddr,
-    sync::Arc,
     time::{Duration, Instant},
 };
 use tokio::{
-    net::{udp, UdpSocket},
+    net::UdpSocket,
     time::timeout,
 };
 

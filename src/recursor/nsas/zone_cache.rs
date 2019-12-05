@@ -1,6 +1,6 @@
 use crate::recursor::nsas::{
     entry_key::EntryKey,
-    nameserver_cache::{Nameserver, NameserverCache, NameserverEntry},
+    nameserver_cache::{Nameserver, NameserverCache},
 };
 use lru::LruCache;
 use r53::Name;

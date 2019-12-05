@@ -1,6 +1,6 @@
 use failure::Fail;
 use serde_yaml;
-use std::{io, net::IpAddr};
+use std::io;
 
 #[derive(Debug, Fail)]
 pub enum VgError {

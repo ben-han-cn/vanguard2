@@ -1,11 +1,7 @@
 use super::forwarder::Forwarder;
-use crate::{
-    config::ForwarderConfig,
-    nameserver::{Nameserver, NameserverStore},
-};
+use crate::{config::ForwarderConfig, nameserver::Nameserver};
 use domaintree::DomainTree;
 use r53::Name;
-use std::{cell::Cell, cmp::Eq, net::SocketAddr, ops::Rem, str::FromStr};
 
 pub struct ForwarderPool {
     forwarders: Vec<Forwarder>,

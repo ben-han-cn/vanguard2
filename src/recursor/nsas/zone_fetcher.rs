@@ -7,21 +7,19 @@ use crate::recursor::{
     },
     resolver::Resolver,
 };
-use failure::{self, Result};
-use futures::{future, prelude::*, Future};
-use lru::LruCache;
+use failure::Result;
 use r53::{Message, Name, RRType};
 use std::{
     sync::{Arc, Mutex},
 };
 
 pub async fn fetch_zone<R: Resolver>(
-    mut zone: Name,
+    zone: Name,
     resolver: R,
     nameservers: Arc<Mutex<NameserverCache>>,
     zones: Arc<Mutex<ZoneCache>>,
     depth: usize,
-    ) -> failure::Result<Nameserver> {
+    ) -> Result<Nameserver> {
     let response = resolver.resolve(&Message::with_query(zone.clone(), RRType::NS), depth+1).await?;
     if let Ok((zone_entry, nameserver_entries)) = message_to_zone_entry(&zone, response) {
         if let Some(nameserver_entries) = nameserver_entries {
@@ -37,7 +35,7 @@ pub async fn fetch_zone<R: Resolver>(
             }
             return Ok(nameserver);
         } else {
-            let (nameserver, mut missing_names) = {
+            let (nameserver, missing_names) = {
                 let mut nameservers = nameservers.lock().unwrap();
                 zone_entry.select_nameserver(&mut nameservers)
             };

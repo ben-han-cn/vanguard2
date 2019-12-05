@@ -1,5 +1,4 @@
 use crate::recursor::{nsas::error::NSASError, resolver::Resolver};
-use crate::types::Query;
 use failure;
 use futures::{future, Future};
 use r53::{
@@ -7,7 +6,6 @@ use r53::{
 };
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
-use std::io::{Error, ErrorKind};
 use std::pin::Pin;
 
 type FackResponse = (Vec<RData>, Vec<RRset>);
@@ -54,7 +52,7 @@ impl Resolver for DumbResolver {
         &self,
         request: &Message,
         _depth: usize,
-    ) -> Pin<Box<Future<Output = Result<Message, failure::Error>> + Send + 'static>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Message, failure::Error>> + Send + 'static>> {
         let question = request.question.as_ref().unwrap();
         let name = question.name.clone();
         let typ = question.typ;

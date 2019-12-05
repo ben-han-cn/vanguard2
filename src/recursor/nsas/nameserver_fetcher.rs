@@ -5,7 +5,6 @@ use crate::recursor::{
     },
     resolver::Resolver,
 };
-use failure;
 use r53::{Message, Name, RRType};
 use std::{
     sync::{Arc, Mutex},

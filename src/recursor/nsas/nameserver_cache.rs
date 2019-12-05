@@ -176,7 +176,6 @@ pub fn select_from_nameservers(nameserver_entries: &Vec<NameserverEntry>) -> Nam
 
 mod test {
     use super::*;
-    use std::net::Ipv4Addr;
 
     #[test]
     fn test_nameserver_cache() {

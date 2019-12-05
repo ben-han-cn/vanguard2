@@ -4,20 +4,17 @@ use std::sync::{Arc, Mutex};
 use crate::auth::AuthServer;
 use crate::config::VanguardConfig;
 use crate::server::{QueryCoder};
-use crate::types::{Query, classify_response};
-use crate::error::VgError;
+use crate::types::Query;
 use crate::forwarder::ForwarderManager;
 use crate::cache::MessageCache;
 use crate::recursor::{Recursor};
-use r53::{MessageRender, Message};
+use r53::Message;
 
 use tokio::prelude::*;
 use tokio::net::UdpSocket;
 use tokio_util::udp::UdpFramed;
-use failure::Error;
-use futures::channel::mpsc::{channel, Receiver, Sender};
-use futures::stream::{self, Stream, TryStreamExt};
-use futures::{FutureExt, SinkExt, StreamExt};
+use futures::channel::mpsc::channel;
+use futures::{SinkExt, StreamExt};
 
 const QUERY_BUFFER_LEN :usize = 512;
 const DEFAULT_MESSAGE_CACHE_SIZE: usize = 10000;

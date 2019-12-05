@@ -1,14 +1,12 @@
 use super::{
     nsas::NSAddressStore, resolver::Resolver, roothint::RootHint, running_query::RunningQuery,
 };
-use crate::{cache::MessageCache, config::RecursorConfig, error::VgError, types::Query};
+use crate::{cache::MessageCache, config::RecursorConfig};
 use failure;
 use futures::Future;
-use r53::{name, Message, Name, RRType};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use r53::Message;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
-use tokio::time::timeout;
 
 const DEFAULT_MESSAGE_CACHE_SIZE: usize = 10000;
 #[derive(Clone)]
@@ -30,7 +28,7 @@ impl Recursor {
     pub fn handle_query(
         &self,
         query: &Message,
-    ) -> Pin<Box<Future<Output = Result<Message, failure::Error>> + Send>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Message, failure::Error>> + Send>> {
         self.resolve(query, 0)
     }
 }
@@ -40,7 +38,7 @@ impl Resolver for Recursor {
         &self,
         query: &Message,
         depth: usize,
-    ) -> Pin<Box<Future<Output = Result<Message, failure::Error>> + Send>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Message, failure::Error>> + Send>> {
         Box::pin(RunningQuery::new(query, self.clone(), depth).handle_query())
     }
 }

@@ -5,15 +5,12 @@ use super::{
 use crate::{
     types::Query,
     config::ForwarderConfig,
-    nameserver::{Nameserver, NameserverStore, send_query},
+    nameserver::{NameserverStore, send_query},
 };
 use failure;
 use domaintree::DomainTree;
-use futures::{prelude::*, Future};
-use r53::{Message, Name, RRType};
+use r53::Message;
 use std::{
-    mem,
-    net::SocketAddr,
     sync::{Arc, RwLock},
 };
 

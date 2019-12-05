@@ -1,4 +1,3 @@
-use crate::types::Query;
 use std::{net::SocketAddr, time::Duration};
 
 pub trait Nameserver {
