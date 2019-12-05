@@ -1,5 +1,5 @@
 use super::message_cache::MessageLruCache;
-use crate::types::ResponseCategory;
+use crate::types::{classify_response, ResponseCategory};
 use r53::{Message, Name, RRType, RRset};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -42,7 +42,11 @@ impl MessageCache {
         }
     }
 
-    pub fn add_response(&mut self, response_type: ResponseCategory, response: Message) {
+    pub fn add_response(&mut self, response: Message) {
+        debug_assert!(response.question.is_some());
+
+        let question = response.question.as_ref().unwrap();
+        let response_type = classify_response(&question.name, question.typ, &response);
         match response_type {
             ResponseCategory::Answer | ResponseCategory::AnswerCName => {
                 self.positive_cache.add_response(response);

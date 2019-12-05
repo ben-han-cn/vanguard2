@@ -52,9 +52,7 @@ impl RunningQuery {
             let response = self.make_response(response);
             let origin_query_name = &response.question.as_ref().unwrap().name;
             if !origin_query_name.eq(&self.current_name) {
-                let response_type =
-                    classify_response(origin_query_name, self.current_type, &response);
-                cache.add_response(response_type, response.clone());
+                cache.add_response(response.clone());
             }
             return Some(response);
         }
@@ -81,7 +79,7 @@ impl RunningQuery {
                     .cache
                     .lock()
                     .unwrap()
-                    .add_response(response_type, response.clone());
+                    .add_response(response.clone());
                 return Ok(Some(response));
             }
             ResponseCategory::Referral => {
@@ -89,7 +87,7 @@ impl RunningQuery {
                     .cache
                     .lock()
                     .unwrap()
-                    .add_response(response_type, response.clone());
+                    .add_response(response.clone());
                 if !self.fetch_closer_zone(response) {
                     return Ok(Some(self.make_server_failed()));
                 } else {
