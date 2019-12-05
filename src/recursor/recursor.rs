@@ -8,11 +8,9 @@ use r53::{name, Message, Name, RRType};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
-use tokio::prelude::*;
+use tokio::time::timeout;
 
 const DEFAULT_MESSAGE_CACHE_SIZE: usize = 10000;
-
 #[derive(Clone)]
 pub struct Recursor {
     pub(crate) cache: Arc<Mutex<MessageCache>>,
@@ -28,13 +26,21 @@ impl Recursor {
             roothint: Arc::new(RootHint::new()),
         }
     }
+
+    pub fn handle_query(
+        &self,
+        query: &Message,
+    ) -> Pin<Box<Future<Output = Result<Message, failure::Error>> + Send>> {
+        self.resolve(query, 0)
+    }
 }
 
 impl Resolver for Recursor {
-    fn handle_query(
+    fn resolve(
         &self,
-        query: Message,
+        query: &Message,
+        depth: usize,
     ) -> Pin<Box<Future<Output = Result<Message, failure::Error>> + Send>> {
-        Box::pin(RunningQuery::new(query, self.clone()).handle_query())
+        Box::pin(RunningQuery::new(query, self.clone(), depth).handle_query())
     }
 }

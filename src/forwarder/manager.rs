@@ -39,7 +39,7 @@ impl ForwarderManager {
             let question = query.question();
             let mut tmp_query = Message::with_query(question.name.clone(), question.typ);
             tmp_query.header.set_flag(r53::HeaderFlag::RecursionDesired, true);
-            let mut response = send_query(tmp_query, forwarder, self.clone()).await?;
+            let mut response = send_query(&tmp_query, forwarder, self.clone()).await?;
             response.header.id = query.request().header.id;
             Ok(Some(response))
         } else {

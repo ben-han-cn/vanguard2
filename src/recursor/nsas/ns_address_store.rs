@@ -4,7 +4,7 @@ use crate::recursor::{
         address_entry,
         entry_key::EntryKey,
         nameserver_cache::{self, Nameserver, NameserverCache},
-        nameserver_fetcher::fetch_nameserver,
+        nameserver_fetcher::fetch_nameserver_address,
         zone_cache::ZoneCache,
         zone_fetcher::fetch_zone,
     },
@@ -77,7 +77,7 @@ impl NSAddressStore {
             self.probing_name_servers.lock().unwrap().len()
         );
 
-        fetch_nameserver(missing_nameserver.clone(), self.nameservers.clone(), resolver).await;
+        fetch_nameserver_address(missing_nameserver.clone(), self.nameservers.clone(), resolver, 0).await;
 
         let mut probing_name_servers = self.probing_name_servers.lock().unwrap();
         missing_nameserver.into_iter().for_each(|n| {
@@ -88,8 +88,9 @@ impl NSAddressStore {
     pub async fn fetch_nameserver<R: Resolver>(
         &self,
         zone: Name,
-        resolver: R) -> failure::Result<Nameserver> {
-        fetch_zone(zone, resolver, self.nameservers.clone(), self.zones.clone()).await
+        resolver: R,
+        depth: usize) -> failure::Result<Nameserver> {
+        fetch_zone(zone, resolver, self.nameservers.clone(), self.zones.clone(), depth).await
     }
 
     fn missing_server_to_probe(

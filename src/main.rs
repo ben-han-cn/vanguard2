@@ -45,6 +45,7 @@ async fn main() -> Result<(), Error> {
     let socket = UdpSocket::bind(&addr).await?;
     let (mut send_stream, mut recv_stream) = UdpFramed::new(socket, QueryCoder::new()).split();
     let (sender, mut receiver) = channel::<(Message, SocketAddr)>(QUERY_BUFFER_LEN);
+
     tokio::spawn(async move {
         loop {
             let response = receiver.next().await.unwrap();
@@ -84,20 +85,22 @@ async fn main() -> Result<(), Error> {
                         return;
                     }
                     Ok(None) => {
-                        println!("no forwarder found for query");
                     }
                     Err(e) => {
                         println!("forward get err {:?}", e);
                     }
                 }
-                match recursor.handle_query(query.request().clone()).await {
+                match recursor.handle_query(query.request()).await {
                     Ok(response) => {
+                        let question = query.question();
+                        let response_type = classify_response(&question.name, question.typ, &response);
+                        let mut cache = cache.lock().unwrap();
+                        cache.add_response(response_type, response.clone());
                         sender_back.try_send((response, query.client()));
                     }
                     Err(e) => {
                         println!("recursor get err {:?}", e);
                     }
-
                 }
             });
         }

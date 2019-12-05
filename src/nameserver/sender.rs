@@ -16,7 +16,7 @@ use tokio::{
 const DEFAULT_RECV_TIMEOUT: Duration = Duration::from_secs(2); //3 secs
 const DEFAULT_RECV_BUF_SIZE: usize = 1024;
 
-pub async fn send_query<NS: NameserverStore>(request: Message, mut nameserver: NS::Nameserver, nameserver_store: NS) -> failure::Result<Message> { 
+pub async fn send_query<NS: NameserverStore>(request: &Message, mut nameserver: NS::Nameserver, nameserver_store: NS) -> failure::Result<Message> { 
     let mut render = MessageRender::new();
     request.rend(&mut render);
     let mut socket =

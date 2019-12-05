@@ -11,9 +11,9 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-pub async fn fetch_nameserver<R: Resolver> (names: Vec<Name>, nameservers: Arc<Mutex<NameserverCache>>, resolver: R) {
+pub async fn fetch_nameserver_address<R: Resolver> (names: Vec<Name>, nameservers: Arc<Mutex<NameserverCache>>, resolver: R, depth: usize) {
     for name in names {
-        match resolver.handle_query(Message::with_query(name.clone(), RRType::A)).await {
+        match resolver.resolve(&Message::with_query(name.clone(), RRType::A), depth+1).await {
             Ok(response) => { 
                 if let Ok(entry) = message_to_nameserver_entry(name, response) {
                     nameservers.lock().unwrap().add_nameserver(entry);

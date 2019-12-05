@@ -10,8 +10,11 @@ use failure;
 use futures::{future, prelude::*, Future};
 use r53::{message::SectionType, name, Message, MessageBuilder, Name, RData, RRType, Rcode};
 use std::{mem, time::Duration};
+use tokio::time::timeout;
 
 const MAX_CNAME_DEPTH: usize = 12;
+const MAX_QUERY_DEPTH: usize = 10;
+const RECURSOR_TIMEOUT: Duration= Duration::from_secs(10);
 
 pub struct RunningQuery {
     current_name: Name,
@@ -20,10 +23,11 @@ pub struct RunningQuery {
     cname_depth: usize,
     response: Option<Message>,
     recursor: Recursor,
+    depth: usize,
 }
 
 impl RunningQuery {
-    pub fn new(request: Message, recursor: Recursor) -> Self {
+    pub fn new(request: &Message, recursor: Recursor, depth: usize) -> Self {
         let question = request.question.as_ref().unwrap();
         let current_name = question.name.clone();
         let current_type = question.typ;
@@ -33,21 +37,10 @@ impl RunningQuery {
             current_type,
             current_zone: None,
             cname_depth: 0,
-            response: Some(request),
+            response: Some(request.clone()),
             recursor,
+            depth,
         }
-    }
-
-    pub fn reset(&mut self) {
-        let query = self.response.as_mut().unwrap();
-        query.take_section(SectionType::Answer);
-        query.take_section(SectionType::Authority);
-        query.take_section(SectionType::Additional);
-        let question = query.question.as_ref().unwrap();
-        self.current_name = question.name.clone();
-        self.current_type = question.typ;
-        self.current_zone = None;
-        self.cname_depth = 0;
     }
 
     fn lookup_in_cache(&mut self) -> Option<Message> {
@@ -181,6 +174,14 @@ impl RunningQuery {
     }
 
     pub async fn handle_query(mut self) -> failure::Result<Message> {
+        match timeout(RECURSOR_TIMEOUT, self.do_recursive_query()).await {
+            Err(e) => 
+                Err(VgError::TimerErr(e.to_string()).into()),
+            Ok(result) => result,
+        }
+    }
+
+    async fn do_recursive_query(mut self) -> failure::Result<Message> {
         loop {
             if let Some(response) = self.lookup_in_cache() {
                 return Ok(response);
@@ -196,25 +197,22 @@ impl RunningQuery {
                 if nameserver.is_some() {
                     nameserver.unwrap()
                 } else {
+                    if self.depth + 1 > MAX_QUERY_DEPTH {
+                        return Err(VgError::LoopedQuery.into());
+                    }
                     self.recursor.nsas.fetch_nameserver(self.current_zone.as_ref().unwrap().clone(),
                     self.recursor.clone(),
-                    ).await?
+                    self.depth + 1).await?
                 }
             };
 
             if let Ok(response) = send_query(
-                Message::with_query(self.current_name.clone(), self.current_type),
+                &Message::with_query(self.current_name.clone(), self.current_type),
                 nameserver,
                 self.recursor.nsas.clone(),
                 ).await {
-                match self.handle_response(response) {
-                    Err(e) => {
-                        return Err(e);
-                    }
-                    Ok(Some(response)) => {
-                        return Ok(response);
-                    }
-                    _ =>{}
+                if let Ok(Some(final_response)) = self.handle_response(response) {
+                    return Ok(final_response)
                 }
             }
         }

@@ -50,9 +50,10 @@ impl DumbResolver {
 }
 
 impl Resolver for DumbResolver {
-    fn handle_query(
+    fn resolve(
         &self,
-        request: Message,
+        request: &Message,
+        _depth: usize,
     ) -> Pin<Box<Future<Output = Result<Message, failure::Error>> + Send + 'static>> {
         let question = request.question.as_ref().unwrap();
         let name = question.name.clone();

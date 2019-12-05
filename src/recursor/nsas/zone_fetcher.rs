@@ -20,8 +20,9 @@ pub async fn fetch_zone<R: Resolver>(
     resolver: R,
     nameservers: Arc<Mutex<NameserverCache>>,
     zones: Arc<Mutex<ZoneCache>>,
+    depth: usize,
     ) -> failure::Result<Nameserver> {
-    let response = resolver.handle_query(Message::with_query(zone.clone(), RRType::NS)).await?;
+    let response = resolver.resolve(&Message::with_query(zone.clone(), RRType::NS), depth+1).await?;
     if let Ok((zone_entry, nameserver_entries)) = message_to_zone_entry(&zone, response) {
         if let Some(nameserver_entries) = nameserver_entries {
             {
@@ -51,7 +52,7 @@ pub async fn fetch_zone<R: Resolver>(
             debug_assert!(missing_names.is_some());
             let missing_names = missing_names.unwrap();
             for name in missing_names {
-                if let Ok(response) = resolver.handle_query(Message::with_query(name.clone(), RRType::A)).await {
+                if let Ok(response) = resolver.resolve(&Message::with_query(name.clone(), RRType::A), depth+1).await {
                     if let Ok(entry) = message_to_nameserver_entry(name, response) {
                         let nameserver = entry.select_nameserver();
                         nameservers.lock().unwrap().add_nameserver(entry);
