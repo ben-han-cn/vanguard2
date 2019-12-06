@@ -38,6 +38,7 @@ impl From<serde_yaml::Error> for VgError {
     }
 }
 
+#[cfg(test)]
 mod test {
     use super::*;
 

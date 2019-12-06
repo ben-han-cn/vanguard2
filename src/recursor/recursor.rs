@@ -1,6 +1,4 @@
-use super::{
-    nsas::NSAddressStore, resolver::Resolver, roothint::RootHint, running_query::RunningQuery,
-};
+use super::{nsas::NSAddressStore, roothint::RootHint, running_query::RunningQuery};
 use crate::{cache::MessageCache, config::RecursorConfig};
 use failure;
 use futures::Future;
@@ -8,7 +6,14 @@ use r53::Message;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 
-const DEFAULT_MESSAGE_CACHE_SIZE: usize = 10000;
+pub trait RecursiveResolver: Clone + Send {
+    fn resolve(
+        &self,
+        request: &Message,
+        depth: usize,
+    ) -> Pin<Box<dyn Future<Output = Result<Message, failure::Error>> + Send>>;
+}
+
 #[derive(Clone)]
 pub struct Recursor {
     pub(crate) cache: Arc<Mutex<MessageCache>>,
@@ -33,7 +38,7 @@ impl Recursor {
     }
 }
 
-impl Resolver for Recursor {
+impl RecursiveResolver for Recursor {
     fn resolve(
         &self,
         query: &Message,

@@ -4,7 +4,6 @@ use std::{
     time::Duration,
 };
 
-const UNREACHABLE_CACHE_TIME: u64 = 5;
 pub(crate) const UNREACHABLE_RTT: u64 = u64::max_value();
 
 #[derive(Clone, Copy, Debug)]

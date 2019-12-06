@@ -174,8 +174,10 @@ pub fn select_from_nameservers(nameserver_entries: &Vec<NameserverEntry>) -> Nam
         .unwrap()
 }
 
+#[cfg(test)]
 mod test {
     use super::*;
+    use std::net::{IpAddr, Ipv4Addr};
 
     #[test]
     fn test_nameserver_cache() {

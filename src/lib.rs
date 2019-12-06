@@ -9,5 +9,5 @@ mod forwarder;
 mod nameserver;
 mod recursor;
 pub mod resolver;
-mod server;
+pub mod server;
 mod types;

@@ -1,4 +1,5 @@
-use crate::recursor::{nsas::error::NSASError, resolver::Resolver};
+use crate::error::VgError;
+use crate::recursor::RecursiveResolver;
 use failure;
 use futures::{future, Future};
 use r53::{
@@ -47,7 +48,7 @@ impl DumbResolver {
     }
 }
 
-impl Resolver for DumbResolver {
+impl RecursiveResolver for DumbResolver {
     fn resolve(
         &self,
         request: &Message,
@@ -61,9 +62,7 @@ impl Resolver for DumbResolver {
             typ,
         }) {
             None => {
-                return Box::pin(future::err(
-                    NSASError::InvalidNSResponse("time out".to_string()).into(),
-                ));
+                return Box::pin(future::err(VgError::Timeout("time out".to_string()).into()));
             }
             Some((ref answer, ref additional)) => {
                 let mut response = request.clone();

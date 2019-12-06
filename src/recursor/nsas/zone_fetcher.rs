@@ -5,7 +5,7 @@ use crate::recursor::{
         nameserver_cache::{self, Nameserver, NameserverCache},
         zone_cache::ZoneCache,
     },
-    resolver::Resolver,
+    RecursiveResolver,
 };
 use failure::Result;
 use r53::{Message, Name, RRType};
@@ -13,7 +13,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-pub async fn fetch_zone<R: Resolver>(
+pub async fn fetch_zone<R: RecursiveResolver>(
     zone: Name,
     resolver: R,
     nameservers: Arc<Mutex<NameserverCache>>,
@@ -65,11 +65,12 @@ pub async fn fetch_zone<R: Resolver>(
     }
 }
 
+#[cfg(test)]
 mod test {
     use super::*;
-    use crate::recursor::nsas::test_helper::DumbResolver;
+    use crate::recursor::mock_resolver::DumbResolver;
     use lru::LruCache;
-    use r53::{util::hex::from_hex, RData, RRset};
+    use r53::{RData, RRset};
     use std::net::Ipv4Addr;
     use std::str::FromStr;
     use tokio::runtime::Runtime;
@@ -102,6 +103,7 @@ mod test {
                 resolver,
                 nameservers.clone(),
                 zones.clone(),
+                0,
                 )).unwrap();
         assert_eq!(select_nameserver.name, Name::new("ns1.knet.cn").unwrap());
         assert_eq!(select_nameserver.address, Ipv4Addr::new(1, 1, 1, 1));
@@ -142,6 +144,7 @@ mod test {
                 resolver,
                 nameservers.clone(),
                 zones.clone(),
+                0,
                 )).unwrap();
 
         assert_eq!(select_nameserver.name, Name::new("ns3.knet.com").unwrap());

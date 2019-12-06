@@ -121,7 +121,7 @@ fn get_cname_target(rdata: &RData) -> &Name {
 #[cfg(test)]
 mod test {
     use super::*;
-    use r53::{util::hex::from_hex, MessageBuilder};
+    use r53::util::hex::from_hex;
 
     struct TestCase {
         raw: &'static str,

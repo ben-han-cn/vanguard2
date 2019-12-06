@@ -3,14 +3,14 @@ use crate::recursor::{
         message_util::{message_to_nameserver_entry},
         nameserver_cache::{NameserverCache},
     },
-    resolver::Resolver,
+    RecursiveResolver,
 };
 use r53::{Message, Name, RRType};
 use std::{
     sync::{Arc, Mutex},
 };
 
-pub async fn fetch_nameserver_address<R: Resolver> (names: Vec<Name>, nameservers: Arc<Mutex<NameserverCache>>, resolver: R, depth: usize) {
+pub async fn fetch_nameserver_address<R: RecursiveResolver> (names: Vec<Name>, nameservers: Arc<Mutex<NameserverCache>>, resolver: R, depth: usize) {
     for name in names {
         match resolver.resolve(&Message::with_query(name.clone(), RRType::A), depth+1).await {
             Ok(response) => { 
@@ -29,12 +29,12 @@ pub async fn fetch_nameserver_address<R: Resolver> (names: Vec<Name>, nameserver
     }
 }
 
+#[cfg(test)]
 mod test {
     use super::*;
-    use crate::recursor::nsas::test_helper::DumbResolver;
+    use crate::recursor::mock_resolver::DumbResolver;
     use lru::LruCache;
-    use r53::{util::hex::from_hex, RData, RRset};
-    use std::net::Ipv4Addr;
+    use r53::RData;
     use tokio::runtime::Runtime;
 
     #[test]
@@ -58,7 +58,7 @@ mod test {
         let nameservers = Arc::new(Mutex::new(NameserverCache(LruCache::new(100))));
         assert_eq!(nameservers.lock().unwrap().len(), 0);
         let mut rt = Runtime::new().unwrap();
-        rt.block_on(fetch_nameserver(names, nameservers.clone(), resolver));
+        rt.block_on(fetch_nameserver_address(names, nameservers.clone(), resolver, 0));
         assert_eq!(nameservers.lock().unwrap().len(), 3);
     }
 }

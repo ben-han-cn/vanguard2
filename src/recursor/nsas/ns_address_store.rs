@@ -7,7 +7,7 @@ use crate::recursor::{
         zone_cache::ZoneCache,
         zone_fetcher::fetch_zone,
     },
-    resolver::Resolver,
+    RecursiveResolver,
 };
 use failure;
 use lru::LruCache;
@@ -64,7 +64,7 @@ impl NSAddressStore {
         })
     }
 
-    pub async fn probe_missing_nameserver<R: Resolver + Send>(
+    pub async fn probe_missing_nameserver<R: RecursiveResolver+ Send>(
         self,
         missing_nameserver: Vec<Name>,
         resolver: R
@@ -83,7 +83,7 @@ impl NSAddressStore {
         });
     }
 
-    pub async fn fetch_nameserver<R: Resolver>(
+    pub async fn fetch_nameserver<R: RecursiveResolver>(
         &self,
         zone: Name,
         resolver: R,

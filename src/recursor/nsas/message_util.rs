@@ -124,7 +124,7 @@ fn rrset_to_address_entry(rrset: &RRset) -> Vec<AddressEntry> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use r53::{util::hex::from_hex, MessageBuilder};
+    use r53::util::hex::from_hex;
 
     #[test]
     fn test_create_nameserver_from_message() {
