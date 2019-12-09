@@ -6,7 +6,7 @@ use crate::forwarder::ForwarderManager;
 use crate::cache::MessageCache;
 use crate::recursor::{Recursor};
 use r53::Message;
-use futures::{SinkExt, StreamExt, Future};
+use futures::Future;
 use std::pin::Pin;
 
 const DEFAULT_MESSAGE_CACHE_SIZE: usize = 10000;

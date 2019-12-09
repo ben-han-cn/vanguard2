@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 use crate::types::{Query, QueryHandler};
 use r53::Message;
-use super::QueryCoder;
+use super::udp_stream_coder::UdpStreamCoder;
 use tokio::net::UdpSocket;
 use tokio_util::udp::UdpFramed;
 use futures::channel::mpsc::channel;
@@ -21,9 +21,9 @@ impl<H:QueryHandler> UdpServer<H> {
         }
     }
 
-    pub async fn run(&self, addr: &String) {
+    pub async fn run(&self, addr: SocketAddr) {
         let socket = UdpSocket::bind(addr).await.unwrap();
-        let (mut send_stream, mut recv_stream) = UdpFramed::new(socket, QueryCoder::new()).split();
+        let (mut send_stream, mut recv_stream) = UdpFramed::new(socket, UdpStreamCoder::new()).split();
         let (sender, mut receiver) = channel::<(Message, SocketAddr)>(QUERY_BUFFER_LEN);
         tokio::spawn(async move {
             loop {

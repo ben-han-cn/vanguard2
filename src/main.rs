@@ -1,6 +1,6 @@
 use vanguard2::config::VanguardConfig;
 use vanguard2::resolver::Resolver;
-use vanguard2::server::UdpServer;
+use vanguard2::server::Server;
 
 use clap::{App, Arg};
 use tokio::runtime::Runtime;
@@ -19,7 +19,7 @@ fn main() {
     let config_file = matches.value_of("config").unwrap_or("vanguard.conf");
     let config = VanguardConfig::load_config(config_file).unwrap();
     let resolver = Resolver::new(&config);
-    let udp_server = UdpServer::new(resolver);
+    let server = Server::new(&config.server);
     let mut rt = Runtime::new().unwrap();
-    rt.block_on(udp_server.run(&config.server.address));
+    rt.block_on(server.run(resolver));
 }

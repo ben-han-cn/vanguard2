@@ -3,19 +3,19 @@ use r53::{Message, MessageRender};
 use std::io;
 use tokio_util::codec::{Decoder, Encoder};
 
-pub struct QueryCoder {
+pub struct UdpStreamCoder {
     render: MessageRender,
 }
 
-impl QueryCoder {
+impl UdpStreamCoder {
     pub fn new() -> Self {
-        QueryCoder {
+        UdpStreamCoder {
             render: MessageRender::new(),
         }
     }
 }
 
-impl Encoder for QueryCoder {
+impl Encoder for UdpStreamCoder {
     type Item = Message;
     type Error = io::Error;
 
@@ -27,7 +27,7 @@ impl Encoder for QueryCoder {
     }
 }
 
-impl Decoder for QueryCoder {
+impl Decoder for UdpStreamCoder {
     type Item = Message;
     type Error = io::Error;
 
