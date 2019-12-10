@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package client;
+package dynamicdns;
 
 enum RRType {
     A = 0;

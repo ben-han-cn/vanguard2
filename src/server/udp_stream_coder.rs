@@ -1,7 +1,7 @@
 use bytes::BytesMut;
 use r53::{Message, MessageRender};
 use std::io;
-use tokio_util::codec::{Decoder, Encoder};
+use tokio_codec::{Decoder, Encoder};
 
 pub struct UdpStreamCoder {
     render: MessageRender,

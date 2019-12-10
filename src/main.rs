@@ -20,6 +20,6 @@ fn main() {
     let config = VanguardConfig::load_config(config_file).unwrap();
     let resolver = Resolver::new(&config);
     let server = Server::new(&config.server);
-    let mut rt = Runtime::new().unwrap();
+    let rt = Runtime::new().unwrap();
     rt.block_on(server.run(resolver));
 }

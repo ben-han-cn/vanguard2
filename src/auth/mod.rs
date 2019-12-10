@@ -6,12 +6,14 @@ mod zone;
 mod zone_loader;
 
 mod auth_server;
-//mod dynamic_server;
 //mod proto;
 mod zones;
 
 #[cfg(test)]
 mod memory_zone_test;
 
-pub use auth_server::{AuthFuture, AuthServer};
+pub use auth_server::AuthServer;
+pub use error::AuthError;
+pub use zone::ZoneUpdater;
+pub use zones::AuthZone;
 //pub use dynamic_server::DynamicUpdateHandler;

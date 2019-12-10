@@ -1,16 +1,17 @@
 use super::zones::AuthZone;
-use crate::{config::AuthorityConfig, types::Query};
+use crate::{
+    config::{AuthorityConfig, VgCtrlConfig},
+    types::Query,
+};
 use r53::{Message, Name};
+use std::error::Error;
 use std::fs;
+use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
+use tonic::transport::Server;
 
 #[derive(Clone)]
 pub struct AuthServer {
-    zones: Arc<RwLock<AuthZone>>,
-}
-
-pub struct AuthFuture {
-    query: Option<Query>,
     zones: Arc<RwLock<AuthZone>>,
 }
 

@@ -5,7 +5,7 @@ use crate::types::{classify_response, ResponseCategory};
 use failure;
 use r53::{message::SectionType, name, Message, MessageBuilder, Name, RRType, Rcode};
 use std::time::Duration;
-use tokio::time::timeout;
+use tokio_timer::Timeout;
 
 const MAX_CNAME_DEPTH: usize = 12;
 const MAX_QUERY_DEPTH: usize = 10;
@@ -167,7 +167,7 @@ impl RunningQuery {
     }
 
     pub async fn handle_query(self) -> failure::Result<Message> {
-        match timeout(RECURSOR_TIMEOUT, self.do_recursive_query()).await {
+        match Timeout::new(self.do_recursive_query(), RECURSOR_TIMEOUT).await {
             Err(e) => 
                 Err(VgError::TimerErr(e.to_string()).into()),
             Ok(result) => result,

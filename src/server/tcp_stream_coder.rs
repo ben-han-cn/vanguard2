@@ -1,7 +1,7 @@
 use bytes::{Buf, BufMut, BytesMut};
 use r53::{Message, MessageRender};
-use std::io;
-use tokio_util::codec::{Decoder, Encoder};
+use std::io::{self, Cursor};
+use tokio_codec::{Decoder, Encoder};
 
 pub struct TcpStreamCoder {
     render: MessageRender,
@@ -24,7 +24,7 @@ impl Encoder for TcpStreamCoder {
     fn encode(&mut self, message: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
         message.rend(&mut self.render);
         let buffer = self.render.take_data();
-        dst.put_u16(buffer.len() as u16);
+        dst.put_u16_be(buffer.len() as u16);
         dst.extend(buffer);
         self.render.clear();
         Ok(())
@@ -40,7 +40,8 @@ impl Decoder for TcpStreamCoder {
             if src.len() < 2 {
                 return Ok(None);
             }
-            self.message_len = Some(src.get_u16());
+            self.message_len = Some(Cursor::new(&mut *src).get_u16_be());
+            src.split_to(2);
         }
 
         let message_len = self.message_len.unwrap();

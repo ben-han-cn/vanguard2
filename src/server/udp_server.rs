@@ -2,8 +2,7 @@ use std::net::SocketAddr;
 use crate::types::{Query, QueryHandler};
 use r53::Message;
 use super::udp_stream_coder::UdpStreamCoder;
-use tokio::net::UdpSocket;
-use tokio_util::udp::UdpFramed;
+use tokio_net::udp::{UdpSocket, UdpFramed};
 use futures::channel::mpsc::channel;
 use futures::{SinkExt, StreamExt};
 

@@ -1,13 +1,14 @@
-use std::sync::{Arc, Mutex};
 use crate::auth::AuthServer;
-use crate::config::VanguardConfig;
-use crate::types::{Query, QueryHandler};
-use crate::forwarder::ForwarderManager;
 use crate::cache::MessageCache;
-use crate::recursor::{Recursor};
+use crate::config::{VanguardConfig, VgCtrlConfig};
+use crate::forwarder::ForwarderManager;
+use crate::recursor::Recursor;
+use crate::types::{Query, QueryHandler};
 use r53::Message;
-use futures::Future;
+use std::error::Error;
+use std::future::Future;
 use std::pin::Pin;
+use std::sync::{Arc, Mutex};
 
 const DEFAULT_MESSAGE_CACHE_SIZE: usize = 10000;
 
@@ -50,8 +51,7 @@ impl Resolver {
                 self.cache.lock().unwrap().add_response(response.clone());
                 return Some(response);
             }
-            Ok(None) => {
-            }
+            Ok(None) => {}
             Err(e) => {
                 println!("forward get err {:?}", e);
             }
@@ -70,7 +70,10 @@ impl Resolver {
 }
 
 impl QueryHandler for Resolver {
-    fn handle_query(self, query: &Query) -> Pin<Box<dyn Future<Output=Option<Message>> + Send + '_>> {
+    fn handle_query(
+        self,
+        query: &Query,
+    ) -> Pin<Box<dyn Future<Output = Option<Message>> + Send + '_>> {
         Box::pin(self.do_query(query))
     }
 }

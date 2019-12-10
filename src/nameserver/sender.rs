@@ -6,10 +6,8 @@ use std::{
     net::SocketAddr,
     time::{Duration, Instant},
 };
-use tokio::{
-    net::UdpSocket,
-    time::timeout,
-};
+use tokio_net::udp::UdpSocket;
+use tokio_timer::Timeout;
 
 const DEFAULT_RECV_TIMEOUT: Duration = Duration::from_secs(2); //3 secs
 const DEFAULT_RECV_BUF_SIZE: usize = 1024;
@@ -36,7 +34,7 @@ pub async fn send_query<NS: NameserverStore>(request: &Message, mut nameserver: 
     };
 
     let mut buf = vec![0; DEFAULT_RECV_BUF_SIZE];
-    match timeout(last_timeout, socket.recv(&mut buf)).await {
+    match Timeout::new(socket.recv(&mut buf), last_timeout).await {
         Ok(result) => {
             match result {
                 Ok(size) => {

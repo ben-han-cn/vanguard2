@@ -1,5 +1,5 @@
-use futures::Future;
 use r53::{question::Question, Message};
+use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::Pin;
 

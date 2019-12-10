@@ -1,9 +1,9 @@
-extern crate futures;
 extern crate lazy_static;
 
 mod auth;
 mod cache;
 pub mod config;
+mod controller;
 mod error;
 mod forwarder;
 mod nameserver;
