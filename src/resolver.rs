@@ -1,6 +1,6 @@
-use crate::auth::AuthServer;
+use crate::auth::{AuthServer, AuthZone};
 use crate::cache::MessageCache;
-use crate::config::{VanguardConfig, VgCtrlConfig};
+use crate::config::VanguardConfig;
 use crate::forwarder::ForwarderManager;
 use crate::recursor::Recursor;
 use crate::types::{Query, QueryHandler};
@@ -8,7 +8,7 @@ use r53::Message;
 use std::error::Error;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 const DEFAULT_MESSAGE_CACHE_SIZE: usize = 10000;
 
@@ -22,16 +22,20 @@ pub struct Resolver {
 
 impl Resolver {
     pub fn new(config: &VanguardConfig) -> Self {
-        let auth_server = AuthServer::new(&config.auth);
-        let forwarder = ForwarderManager::new(&config.forwarder);
+        let auth_server = AuthServer::new(config.auth.as_ref().unwrap());
+        let forwarder = ForwarderManager::new(config.forwarder.as_ref().unwrap());
         let cache = Arc::new(Mutex::new(MessageCache::new(DEFAULT_MESSAGE_CACHE_SIZE)));
-        let recursor = Recursor::new(&config.recursor, cache.clone());
+        let recursor = Recursor::new(config.recursor.as_ref().unwrap(), cache.clone());
         Resolver {
             auth_server,
             forwarder,
             recursor,
             cache,
         }
+    }
+
+    pub fn zone_data(&self) -> Arc<RwLock<AuthZone>> {
+        self.auth_server.zone_data()
     }
 
     async fn do_query(self, query: &Query) -> Option<Message> {

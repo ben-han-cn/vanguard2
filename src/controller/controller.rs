@@ -1,26 +1,28 @@
-use super::{
-    dynamic_server::{dynamic_dns::server::DynamicUpdateInterfaceServer, DynamicUpdateHandler},
-}
-use crate::auth::AuthZone;
+use super::dynamic_server::{
+    dynamic_dns::server::DynamicUpdateInterfaceServer, DynamicUpdateHandler,
+};
+use crate::{auth::AuthZone, config::ControllerConfig};
+use std::net::SocketAddr;
+use std::sync::{Arc, RwLock};
+use tonic::transport::Server;
 
-pub struct Controller{
-    dynamic_dns_server: DynamicUpdateHandler, 
+pub struct Controller {
+    addr: SocketAddr,
+    dynamic_handler: DynamicUpdateHandler,
 }
 
 impl Controller {
-    pub fn new(zones: Arc<RwLock<AuthZone>>) -> Self {
+    pub fn new(conf: &ControllerConfig, zones: Arc<RwLock<AuthZone>>) -> Self {
         Controller {
+            addr: conf.address.parse().unwrap(),
             dynamic_handler: DynamicUpdateHandler::new(zones),
         }
     }
 
-    pub async fn run(self,  conf: &VgCtrlConfig) {
-        let addr = conf.address.parse().unwrap();
-        let dynamic_handler = DynamicUpdateHandler::new(self.zones.clone());
+    pub async fn run(self) {
         Server::builder()
-            .add_service(DynamicUpdateInterfaceServer::new(dynamic_handler))
-            .serve(addr)
-            .await.unwrap();
-        Ok(())
+            .add_service(DynamicUpdateInterfaceServer::new(self.dynamic_handler))
+            .serve(self.addr)
+            .await;
     }
 }

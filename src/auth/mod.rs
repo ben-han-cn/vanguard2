@@ -16,4 +16,3 @@ pub use auth_server::AuthServer;
 pub use error::AuthError;
 pub use zone::ZoneUpdater;
 pub use zones::AuthZone;
-//pub use dynamic_server::DynamicUpdateHandler;

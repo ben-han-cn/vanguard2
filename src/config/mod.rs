@@ -5,11 +5,11 @@ use std::{fs::File, io::prelude::*, path::Path};
 #[derive(Debug, Deserialize, Serialize)]
 pub struct VanguardConfig {
     pub server: ServerConfig,
-    pub auth: AuthorityConfig,
-    pub recursor: RecursorConfig,
-    pub forwarder: ForwarderConfig,
-    pub vg_ctrl: VgCtrlConfig,
-    pub metrics: MetricsConfig,
+    pub auth: Option<AuthorityConfig>,
+    pub recursor: Option<RecursorConfig>,
+    pub forwarder: Option<ForwarderConfig>,
+    pub controller: Option<ControllerConfig>,
+    pub metrics: Option<MetricsConfig>,
 }
 
 impl VanguardConfig {
@@ -91,13 +91,13 @@ pub struct ZoneForwarderConfig {
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(default)]
-pub struct VgCtrlConfig {
+pub struct ControllerConfig {
     pub address: String,
 }
 
-impl Default for VgCtrlConfig {
+impl Default for ControllerConfig {
     fn default() -> Self {
-        VgCtrlConfig {
+        ControllerConfig {
             address: "127.0.0.1:5555".to_string(),
         }
     }
