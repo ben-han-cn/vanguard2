@@ -38,6 +38,60 @@ impl DynamicUpdateHandler {
             Err(AuthError::UnknownZone(zone.to_string()).into())
         }
     }
+
+    fn do_delete_domains(&self, zone: &Name, names: Vec<Name>) -> Result<(), failure::Error> {
+        let mut zones = self.zones.write().unwrap();
+        if let Some(zone) = zones.get_exact_zone(zone) {
+            for name in names {
+                zones.delete_zone(&name)?;
+            }
+            Ok(())
+        } else {
+            Err(AuthError::UnknownZone(zone.to_string()).into())
+        }
+    }
+
+    fn do_delete_rrsets(
+        &self,
+        zone: &Name,
+        rrset_headers: Vec<(Name, RRType)>,
+    ) -> Result<(), failure::Error> {
+        let mut zones = self.zones.write().unwrap();
+        if let Some(zone) = zones.get_exact_zone(zone) {
+            for rrset_header in rrset_headers {
+                zone.delete_rrset(&rrset_header.0, rrset_header.1)?;
+            }
+            Ok(())
+        } else {
+            Err(AuthError::UnknownZone(zone.to_string()).into())
+        }
+    }
+
+    fn do_delete_rdatas(&self, zone: &Name, rrsets: Vec<RRset>) -> Result<(), failure::Error> {
+        let mut zones = self.zones.write().unwrap();
+        if let Some(zone) = zones.get_exact_zone(zone) {
+            for rrset in rrsets {
+                zone.delete_rdata(&rrset)?;
+            }
+            Ok(())
+        } else {
+            Err(AuthError::UnknownZone(zone.to_string()).into())
+        }
+    }
+
+    fn do_update_rdata(
+        &self,
+        zone: &Name,
+        old_rrset: RRset,
+        new_rrset: RRset,
+    ) -> Result<(), failure::Error> {
+        let mut zones = self.zones.write().unwrap();
+        if let Some(zone) = zones.get_exact_zone(zone) {
+            zone.update_rdata(&old_rrset, new_rrset)
+        } else {
+            Err(AuthError::UnknownZone(zone.to_string()).into())
+        }
+    }
 }
 
 #[tonic::async_trait]
@@ -85,7 +139,7 @@ impl DynamicUpdateInterface for DynamicUpdateHandler {
         let AddRRsetRequest { zone, rrsets } = request.into_inner();
         let zone = r53::Name::new(zone.as_ref());
         if let Err(e) = zone {
-            return Err(Status::new(Code::Internal, e.to_string()));
+            return Err(Status::new(Code::InvalidArgument, e.to_string()));
         }
 
         let rrsets = rrsets.iter().map(|rrset| proto_rrset_to_r53(rrset)).fold(
@@ -100,7 +154,7 @@ impl DynamicUpdateInterface for DynamicUpdateHandler {
             },
         );
         if let Err(e) = rrsets {
-            return Err(Status::new(Code::Internal, e.to_string()));
+            return Err(Status::new(Code::InvalidArgument, e.to_string()));
         }
 
         match self.do_add_rrsets(&zone.unwrap(), rrsets.unwrap()) {
@@ -113,25 +167,117 @@ impl DynamicUpdateInterface for DynamicUpdateHandler {
         &self,
         request: tonic::Request<DeleteDomainRequest>,
     ) -> Result<tonic::Response<DeleteDomainResponse>, tonic::Status> {
-        Err(tonic::Status::unimplemented("Not yet implemented"))
+        let DeleteDomainRequest { zone, names } = request.into_inner();
+        let zone = r53::Name::new(zone.as_ref());
+        if let Err(e) = zone {
+            return Err(Status::new(Code::InvalidArgument, e.to_string()));
+        }
+        let names: Result<Vec<Name>, _> = names.iter().map(|n| r53::Name::new(n)).collect();
+        if let Err(e) = names {
+            return Err(Status::new(Code::InvalidArgument, e.to_string()));
+        }
+        match self.do_delete_domains(&zone.unwrap(), names.unwrap()) {
+            Ok(_) => Ok(Response::new(DeleteDomainResponse {})),
+            Err(e) => Err(Status::new(Code::InvalidArgument, e.to_string())),
+        }
     }
+
     async fn delete_r_rset(
         &self,
         request: tonic::Request<DeleteRRsetRequest>,
     ) -> Result<tonic::Response<DeleteRRsetResponse>, tonic::Status> {
-        Err(tonic::Status::unimplemented("Not yet implemented"))
+        let DeleteRRsetRequest { zone, rrsets } = request.into_inner();
+        let zone = r53::Name::new(zone.as_ref());
+        if let Err(e) = zone {
+            return Err(Status::new(Code::InvalidArgument, e.to_string()));
+        }
+
+        let headers = rrsets.iter().fold(
+            Ok(Vec::new()),
+            |headers: Result<Vec<(Name, RRType)>, failure::Error>, header| match headers {
+                Ok(mut headers) => {
+                    let name = Name::new(header.name.as_ref())?;
+                    headers.push((name, proto_typ_to_r53(header.r#type)));
+                    Ok(headers)
+                }
+                Err(e) => Err(e),
+            },
+        );
+        if let Err(e) = headers {
+            return Err(Status::new(Code::InvalidArgument, e.to_string()));
+        }
+
+        match self.do_delete_rrsets(&zone.unwrap(), headers.unwrap()) {
+            Ok(_) => Ok(Response::new(DeleteRRsetResponse {})),
+            Err(e) => Err(Status::new(Code::Internal, e.to_string())),
+        }
     }
+
     async fn delete_rdata(
         &self,
         request: tonic::Request<DeleteRdataRequest>,
     ) -> Result<tonic::Response<DeleteRdataResponse>, tonic::Status> {
-        Err(tonic::Status::unimplemented("Not yet implemented"))
+        let DeleteRdataRequest { zone, rrsets } = request.into_inner();
+        let zone = r53::Name::new(zone.as_ref());
+        if let Err(e) = zone {
+            return Err(Status::new(Code::InvalidArgument, e.to_string()));
+        }
+
+        let rrsets = rrsets.iter().map(|rrset| proto_rrset_to_r53(rrset)).fold(
+            Ok(Vec::new()),
+            |rrsets: Result<Vec<RRset>, failure::Error>, rrset| match rrsets {
+                Ok(mut rrsets) => {
+                    let rrset = rrset?;
+                    rrsets.push(rrset);
+                    Ok(rrsets)
+                }
+                Err(e) => Err(e),
+            },
+        );
+        if let Err(e) = rrsets {
+            return Err(Status::new(Code::InvalidArgument, e.to_string()));
+        }
+
+        match self.do_delete_rdatas(&zone.unwrap(), rrsets.unwrap()) {
+            Ok(_) => Ok(Response::new(DeleteRdataResponse {})),
+            Err(e) => Err(Status::new(Code::Internal, e.to_string())),
+        }
     }
+
     async fn update_rdata(
         &self,
         request: tonic::Request<UpdateRdataRequest>,
     ) -> Result<tonic::Response<UpdateRdataResponse>, tonic::Status> {
-        Err(tonic::Status::unimplemented("Not yet implemented"))
+        let UpdateRdataRequest {
+            zone,
+            old_rrset,
+            new_rrset,
+        } = request.into_inner();
+        let zone = r53::Name::new(zone.as_ref());
+        if let Err(e) = zone {
+            return Err(Status::new(Code::InvalidArgument, e.to_string()));
+        }
+
+        if old_rrset.is_none() || new_rrset.is_none() {
+            return Err(Status::new(
+                Code::InvalidArgument,
+                "old or new rrset is empty".to_string(),
+            ));
+        }
+
+        let old_rrset = proto_rrset_to_r53(old_rrset.as_ref().unwrap());
+        let new_rrset = proto_rrset_to_r53(new_rrset.as_ref().unwrap());
+        if let Err(e) = old_rrset {
+            return Err(Status::new(Code::InvalidArgument, e.to_string()));
+        }
+        if let Err(e) = new_rrset {
+            return Err(Status::new(Code::InvalidArgument, e.to_string()));
+        }
+
+        match self.do_update_rdata(&zone.unwrap(), old_rrset.unwrap(), new_rrset.unwrap()) {
+            Ok(_) => Ok(Response::new(UpdateRdataResponse {})),
+            Err(e) => Err(Status::new(Code::Internal, e.to_string())),
+        }
     }
 }
 

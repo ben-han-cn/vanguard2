@@ -4,12 +4,18 @@ use std::{fs::File, io::prelude::*, path::Path};
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct VanguardConfig {
+    #[serde(default)]
     pub server: ServerConfig,
-    pub auth: Option<AuthorityConfig>,
-    pub recursor: Option<RecursorConfig>,
-    pub forwarder: Option<ForwarderConfig>,
-    pub controller: Option<ControllerConfig>,
-    pub metrics: Option<MetricsConfig>,
+    #[serde(default)]
+    pub auth: AuthorityConfig,
+    #[serde(default)]
+    pub recursor: RecursorConfig,
+    #[serde(default)]
+    pub forwarder: ForwarderConfig,
+    #[serde(default)]
+    pub controller: ControllerConfig,
+    #[serde(default)]
+    pub metrics: MetricsConfig,
 }
 
 impl VanguardConfig {
@@ -24,9 +30,9 @@ impl VanguardConfig {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-#[serde(default)]
 pub struct ServerConfig {
     pub address: String,
+    #[serde(default)]
     pub enable_tcp: bool,
 }
 
@@ -40,8 +46,8 @@ impl Default for ServerConfig {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-#[serde(default)]
 pub struct AuthorityConfig {
+    #[serde(default)]
     pub zones: Vec<AuthZoneConfig>,
 }
 
@@ -58,8 +64,8 @@ pub struct AuthZoneConfig {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-#[serde(default)]
 pub struct RecursorConfig {
+    #[serde(default)]
     pub enable: bool,
 }
 
@@ -70,8 +76,8 @@ impl Default for RecursorConfig {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-#[serde(default)]
 pub struct ForwarderConfig {
+    #[serde(default)]
     pub forwarders: Vec<ZoneForwarderConfig>,
 }
 
@@ -90,7 +96,6 @@ pub struct ZoneForwarderConfig {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-#[serde(default)]
 pub struct ControllerConfig {
     pub address: String,
 }
@@ -104,7 +109,6 @@ impl Default for ControllerConfig {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-#[serde(default)]
 pub struct MetricsConfig {
     pub address: String,
 }

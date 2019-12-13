@@ -22,10 +22,10 @@ pub struct Resolver {
 
 impl Resolver {
     pub fn new(config: &VanguardConfig) -> Self {
-        let auth_server = AuthServer::new(config.auth.as_ref().unwrap());
-        let forwarder = ForwarderManager::new(config.forwarder.as_ref().unwrap());
+        let auth_server = AuthServer::new(&config.auth);
+        let forwarder = ForwarderManager::new(&config.forwarder);
         let cache = Arc::new(Mutex::new(MessageCache::new(DEFAULT_MESSAGE_CACHE_SIZE)));
-        let recursor = Recursor::new(config.recursor.as_ref().unwrap(), cache.clone());
+        let recursor = Recursor::new(&config.recursor, cache.clone());
         Resolver {
             auth_server,
             forwarder,

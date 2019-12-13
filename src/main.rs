@@ -21,7 +21,7 @@ fn main() {
     let config = VanguardConfig::load_config(config_file).unwrap();
     let resolver = Resolver::new(&config);
     let server = Server::new(&config.server);
-    let controller = Controller::new(config.controller.as_ref().unwrap(), resolver.zone_data());
+    let controller = Controller::new(&config.controller, resolver.zone_data());
     let rt = Runtime::new().unwrap();
     rt.spawn(controller.run());
     rt.block_on(server.run(resolver));
