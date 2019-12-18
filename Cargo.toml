@@ -19,10 +19,12 @@ tokio-codec =  "=0.2.0-alpha.6"
 tokio-timer =  "=0.3.0-alpha.6"
 futures-preview = { version = "=0.3.0-alpha.19", features = ["async-await"] }
 bytes = "0.4"
-lazy_static = "1.3.0"
 tonic = "0.1.0-alpha.6"
 prost = "0.5"
 prost-derive = "0.5"
+hyper = "0.13.0-alpha.4"
+prometheus = "0.7"
+lazy_static = "1.4.0"
 
 [[bin]]
 name = "vanguard2"

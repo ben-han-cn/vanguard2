@@ -103,7 +103,7 @@ pub struct ControllerConfig {
 impl Default for ControllerConfig {
     fn default() -> Self {
         ControllerConfig {
-            address: "127.0.0.1:5555".to_string(),
+            address: "127.0.0.1:5556".to_string(),
         }
     }
 }
