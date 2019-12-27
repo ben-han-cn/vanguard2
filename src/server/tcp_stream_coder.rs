@@ -1,7 +1,7 @@
 use bytes::{Buf, BufMut, BytesMut};
 use r53::{Message, MessageRender};
 use std::io::{self, Cursor};
-use tokio_codec::{Decoder, Encoder};
+use tokio_util::codec::{Decoder, Encoder};
 
 pub struct TcpStreamCoder {
     render: MessageRender,

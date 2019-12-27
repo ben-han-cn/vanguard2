@@ -6,8 +6,9 @@ use prometheus::{IntCounter, IntGauge};
 use r53::Message;
 use std::net::SocketAddr;
 use std::time::Duration;
-use tokio::timer::Interval;
-use tokio_net::udp::{UdpFramed, UdpSocket};
+use tokio::net::UdpSocket;
+use tokio::time;
+use tokio_util::udp::UdpFramed;
 
 lazy_static! {
     static ref QPS_UDP_INT_GAUGE: IntGauge =
@@ -57,10 +58,10 @@ impl<H: QueryHandler> UdpServer<H> {
 }
 
 async fn calculate_qps() {
-    let mut interval = Interval::new_interval(Duration::from_secs(1));
+    let mut interval = time::interval(Duration::from_secs(1));
     let mut last_qc = 0;
     loop {
-        interval.next().await;
+        interval.tick().await;
         let qc = QC_UDP_INT_COUNT.get() as u64;
         QPS_UDP_INT_GAUGE.set((qc - last_qc) as i64);
         last_qc = qc;

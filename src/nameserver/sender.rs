@@ -6,17 +6,20 @@ use std::{
     net::SocketAddr,
     time::{Duration, Instant},
 };
-use tokio_net::udp::UdpSocket;
-use tokio_timer::Timeout;
+use tokio::net::UdpSocket;
+use tokio::time::timeout;
 
 const DEFAULT_RECV_TIMEOUT: Duration = Duration::from_secs(2); //3 secs
 const DEFAULT_RECV_BUF_SIZE: usize = 1024;
 
-pub async fn send_query<NS: NameserverStore>(request: &Message, mut nameserver: NS::Nameserver, nameserver_store: NS) -> failure::Result<Message> { 
+pub async fn send_query<NS: NameserverStore>(
+    request: &Message,
+    mut nameserver: NS::Nameserver,
+    nameserver_store: NS,
+) -> failure::Result<Message> {
     let mut render = MessageRender::new();
     request.rend(&mut render);
-    let mut socket =
-        UdpSocket::bind(&("0.0.0.0:0".parse::<SocketAddr>().unwrap())).await?;
+    let mut socket = UdpSocket::bind(&("0.0.0.0:0".parse::<SocketAddr>().unwrap())).await?;
     let target = nameserver.get_addr();
     let send_time = Instant::now();
     if let Err(e) = socket.send_to(&render.take_data(), &target).await {
@@ -34,21 +37,19 @@ pub async fn send_query<NS: NameserverStore>(request: &Message, mut nameserver: 
     };
 
     let mut buf = vec![0; DEFAULT_RECV_BUF_SIZE];
-    match Timeout::new(socket.recv(&mut buf), last_timeout).await {
-        Ok(result) => {
-            match result {
-                Ok(size) => {
-                    nameserver.set_rtt(send_time.elapsed());
-                    nameserver_store.update_nameserver_rtt(&nameserver);
-                    return Message::from_wire(&buf[..size]);
-                }
-                Err(e) => {
-                    nameserver.set_unreachable();
-                    nameserver_store.update_nameserver_rtt(&nameserver);
-                    return Err(VgError::IoError(e).into());
-                }
+    match timeout(last_timeout, socket.recv(&mut buf)).await {
+        Ok(result) => match result {
+            Ok(size) => {
+                nameserver.set_rtt(send_time.elapsed());
+                nameserver_store.update_nameserver_rtt(&nameserver);
+                return Message::from_wire(&buf[..size]);
             }
-        }
+            Err(e) => {
+                nameserver.set_unreachable();
+                nameserver_store.update_nameserver_rtt(&nameserver);
+                return Err(VgError::IoError(e).into());
+            }
+        },
         Err(_) => {
             nameserver.set_rtt(DEFAULT_RECV_TIMEOUT);
             nameserver_store.update_nameserver_rtt(&nameserver);

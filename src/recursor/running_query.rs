@@ -1,15 +1,15 @@
 use super::recursor::Recursor;
 use crate::error::VgError;
-use crate::nameserver::{send_query};
+use crate::nameserver::send_query;
 use crate::types::{classify_response, ResponseCategory};
 use failure;
 use r53::{message::SectionType, name, Message, MessageBuilder, Name, RRType, Rcode};
 use std::time::Duration;
-use tokio_timer::Timeout;
+use tokio::time::timeout;
 
 const MAX_CNAME_DEPTH: usize = 12;
 const MAX_QUERY_DEPTH: usize = 10;
-const RECURSOR_TIMEOUT: Duration= Duration::from_secs(10);
+const RECURSOR_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub struct RunningQuery {
     current_name: Name,
@@ -43,7 +43,7 @@ impl RunningQuery {
 
         let cache = self.recursor.cache.clone();
         let mut cache = cache.lock().unwrap();
-        if let Some(response)= cache.gen_response(&current_query) {
+        if let Some(response) = cache.gen_response(&current_query) {
             let response = self.make_response(response);
             let origin_query_name = &response.question.as_ref().unwrap().name;
             if !origin_query_name.eq(&self.current_name) {
@@ -167,9 +167,8 @@ impl RunningQuery {
     }
 
     pub async fn handle_query(self) -> failure::Result<Message> {
-        match Timeout::new(self.do_recursive_query(), RECURSOR_TIMEOUT).await {
-            Err(e) => 
-                Err(VgError::TimerErr(e.to_string()).into()),
+        match timeout(RECURSOR_TIMEOUT, self.do_recursive_query()).await {
+            Err(e) => Err(VgError::TimerErr(e.to_string()).into()),
             Ok(result) => result,
         }
     }
@@ -181,11 +180,16 @@ impl RunningQuery {
             }
 
             let nameserver = {
-                let (nameserver, missing_nameserver) = self.recursor.nsas.get_nameserver(&self.current_zone.as_ref().unwrap());
+                let (nameserver, missing_nameserver) = self
+                    .recursor
+                    .nsas
+                    .get_nameserver(&self.current_zone.as_ref().unwrap());
                 if missing_nameserver.is_some() {
                     let nsas = self.recursor.nsas.clone();
                     let resolver = self.recursor.clone();
-                    tokio::spawn(nsas.probe_missing_nameserver(missing_nameserver.unwrap(), resolver));
+                    tokio::spawn(
+                        nsas.probe_missing_nameserver(missing_nameserver.unwrap(), resolver),
+                    );
                 }
                 if nameserver.is_some() {
                     nameserver.unwrap()
@@ -193,9 +197,14 @@ impl RunningQuery {
                     if self.depth + 1 > MAX_QUERY_DEPTH {
                         return Err(VgError::LoopedQuery.into());
                     }
-                    self.recursor.nsas.fetch_nameserver(self.current_zone.as_ref().unwrap().clone(),
-                    self.recursor.clone(),
-                    self.depth + 1).await?
+                    self.recursor
+                        .nsas
+                        .fetch_nameserver(
+                            self.current_zone.as_ref().unwrap().clone(),
+                            self.recursor.clone(),
+                            self.depth + 1,
+                        )
+                        .await?
                 }
             };
 
@@ -203,9 +212,11 @@ impl RunningQuery {
                 &Message::with_query(self.current_name.clone(), self.current_type),
                 nameserver,
                 self.recursor.nsas.clone(),
-                ).await {
+            )
+            .await
+            {
                 if let Ok(Some(final_response)) = self.handle_response(response) {
-                    return Ok(final_response)
+                    return Ok(final_response);
                 }
             }
         }

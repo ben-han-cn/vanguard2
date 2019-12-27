@@ -13,16 +13,14 @@ failure = { git = "https://github.com/ben-han-cn/cement-rs", package = "failure_
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.8"
 lru = "0.1.15"
-tokio =  "=0.2.0-alpha.6"
-tokio-net =  "=0.2.0-alpha.6"
-tokio-codec =  "=0.2.0-alpha.6"
-tokio-timer =  "=0.3.0-alpha.6"
-futures-preview = { version = "=0.3.0-alpha.19", features = ["async-await"] }
-bytes = "0.4"
-tonic = "0.1.0-alpha.6"
+tokio =  { version = "0.2.6", features = ["tcp", "udp", "time"]}
+tokio-util =  { version = "0.2", features = ["codec", "udp"]}
+futures = "0.3"
+bytes = "0.4.7"
+tonic = "0.1.0-beta.1"
 prost = "0.5"
 prost-derive = "0.5"
-hyper = "0.13.0-alpha.4"
+hyper = "0.13"
 prometheus = "0.7"
 lazy_static = "1.4.0"
 
@@ -35,4 +33,4 @@ name = "vanguard2-client"
 path = "src/client.rs"
 
 [build-dependencies]
-tonic-build = "0.1.0-alpha.6"
+tonic-build = "0.1.0-beta.1"

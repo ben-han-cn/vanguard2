@@ -1,5 +1,6 @@
 use super::dynamic_server::{
-    dynamic_dns::server::DynamicUpdateInterfaceServer, DynamicUpdateHandler,
+    dynamic_dns::dynamic_update_interface_server::DynamicUpdateInterfaceServer,
+    DynamicUpdateHandler,
 };
 use crate::{auth::AuthZone, config::ControllerConfig};
 use std::net::SocketAddr;

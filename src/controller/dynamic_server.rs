@@ -8,7 +8,7 @@ pub mod dynamic_dns {
 }
 
 use dynamic_dns::{
-    server::{DynamicUpdateInterface, DynamicUpdateInterfaceServer},
+    dynamic_update_interface_server::{DynamicUpdateInterface, DynamicUpdateInterfaceServer},
     AddRRsetRequest, AddRRsetResponse, AddZoneRequest, AddZoneResponse, DeleteDomainRequest,
     DeleteDomainResponse, DeleteRRsetRequest, DeleteRRsetResponse, DeleteRdataRequest,
     DeleteRdataResponse, DeleteZoneRequest, DeleteZoneResponse, UpdateRdataRequest,
