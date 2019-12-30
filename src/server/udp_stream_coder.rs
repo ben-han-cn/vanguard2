@@ -1,4 +1,4 @@
-use bytes::BytesMut;
+use bytes5::BytesMut;
 use r53::{Message, MessageRender};
 use std::io;
 use tokio_util::codec::{Decoder, Encoder};

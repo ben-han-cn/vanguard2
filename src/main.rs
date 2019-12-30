@@ -23,7 +23,7 @@ fn main() {
     let resolver = Resolver::new(&config);
     let server = Server::new(&config.server);
     let controller = Controller::new(&config.controller, resolver.zone_data());
-    let rt = Runtime::new().unwrap();
+    let mut rt = Runtime::new().unwrap();
     rt.spawn(controller.run());
     rt.spawn(run_metric_server(
         config

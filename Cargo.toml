@@ -17,6 +17,7 @@ tokio =  { version = "0.2.6", features = ["tcp", "udp", "time"]}
 tokio-util =  { version = "0.2", features = ["codec", "udp"]}
 futures = "0.3"
 bytes = "0.4.7"
+bytes5 = { version = "0.5", package = "bytes"}
 tonic = "0.1.0-beta.1"
 prost = "0.5"
 prost-derive = "0.5"

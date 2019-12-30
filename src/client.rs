@@ -4,7 +4,7 @@ use tonic;
 use vanguard2::controller::{AddZoneRequest, DynamicUpdateInterfaceClient};
 
 fn main() {
-    let rt = Runtime::new().unwrap();
+    let mut rt = Runtime::new().unwrap();
     rt.block_on(async {
         let mut client = DynamicUpdateInterfaceClient::connect("http://127.0.0.1:5556")
             .await
