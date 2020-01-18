@@ -1,4 +1,4 @@
-use bytes5::{Buf, BufMut, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 use r53::{Message, MessageRender};
 use std::io::{self, Cursor};
 use tokio_util::codec::{Decoder, Encoder};

@@ -16,11 +16,10 @@ lru = "0.1.15"
 tokio =  { version = "0.2.6", features = ["tcp", "udp", "time"]}
 tokio-util =  { version = "0.2", features = ["codec", "udp"]}
 futures = "0.3"
-bytes = "0.4.7"
-bytes5 = { version = "0.5", package = "bytes"}
-tonic = "0.1.0-beta.1"
-prost = "0.5"
-prost-derive = "0.5"
+bytes = "0.5"
+tonic = "0.1.0"
+prost = "0.6"
+prost-derive = "0.6"
 hyper = "0.13"
 prometheus = "0.7"
 lazy_static = "1.4.0"
@@ -34,4 +33,4 @@ name = "vanguard2-client"
 path = "src/client.rs"
 
 [build-dependencies]
-tonic-build = "0.1.0-beta.1"
+tonic-build = "0.1.0"
