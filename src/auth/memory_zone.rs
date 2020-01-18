@@ -1,8 +1,7 @@
-use crate::auth::error::DataSrcError;
 use crate::auth::rdataset::Rdataset;
 use crate::auth::zone::{FindOption, FindResult, FindResultType, ZoneFinder, ZoneUpdater};
+use anyhow::{bail, ensure, Result};
 use domaintree::{DomainTree, FindResultFlag, NodeChain, NodePtr};
-use failure::Result;
 use r53::{LabelSequence, Name, NameRelation, RData, RRType, RRset};
 use std::mem::swap;
 
@@ -45,9 +44,10 @@ impl MemoryZone {
 
 impl ZoneUpdater for MemoryZone {
     fn add_rrset(&mut self, rrset: RRset) -> Result<()> {
-        if !rrset.name.is_subdomain(&self.origin) {
-            return Err(DataSrcError::OutOfZone.into());
-        }
+        ensure!(
+            rrset.name.is_subdomain(&self.origin),
+            "rrset is out of zone"
+        );
 
         let is_delegation = rrset.typ == RRType::NS && !rrset.name.eq(&self.origin);
         let is_wildcard = rrset.name.is_wildcard();
@@ -85,97 +85,98 @@ impl ZoneUpdater for MemoryZone {
     }
 
     fn delete_rrset(&mut self, name: &Name, typ: RRType) -> Result<()> {
-        if !name.is_subdomain(&self.origin) {
-            return Err(DataSrcError::OutOfZone.into());
-        }
+        ensure!(
+            name.is_subdomain(&self.origin),
+            "rrset to delete is out of zone"
+        );
 
-        if typ == RRType::SOA {
-            return Err(DataSrcError::ZoneShortOfSOA.into());
-        }
+        ensure!(typ != RRType::SOA, "soa is not allowed to delete");
 
         if name.eq(&self.origin) && typ == RRType::NS {
-            return Err(DataSrcError::ZoneShortOfNS.into());
+            bail!("zone ns cann't be delete");
         }
 
         let mut find_result = self.data.find(&name);
-        if find_result.flag == FindResultFlag::ExacatMatch {
-            if let Some(rdataset) = find_result.node.get_value_mut().as_mut() {
-                rdataset.delete_rrset(typ)?;
-                if rdataset.is_empty() {
-                    let node = find_result.node;
-                    if node != self.root_node {
-                        self.remove_node(name, node)
-                    }
+        ensure!(
+            find_result.flag == FindResultFlag::ExacatMatch,
+            "name {} doesn't exist",
+            name
+        );
+        if let Some(rdataset) = find_result.node.get_value_mut().as_mut() {
+            rdataset.delete_rrset(typ)?;
+            if rdataset.is_empty() {
+                let node = find_result.node;
+                if node != self.root_node {
+                    self.remove_node(name, node)
                 }
             }
-            //ignore if rrset doesn't exists
-            Ok(())
-        } else {
-            Err(DataSrcError::NameNotFound(name.to_string()).into())
         }
+        //ignore if rrset doesn't exists
+        Ok(())
     }
 
     fn delete_rdata(&mut self, rrset: &RRset) -> Result<()> {
-        if !rrset.name.is_subdomain(&self.origin) {
-            return Err(DataSrcError::OutOfZone.into());
-        }
+        ensure!(
+            rrset.name.is_subdomain(&self.origin),
+            "delete rdata is out of zone"
+        );
 
-        if rrset.typ == RRType::SOA {
-            return Err(DataSrcError::ZoneShortOfSOA.into());
-        }
+        ensure!(rrset.typ != RRType::SOA, "soa isn't allowed to delete");
 
         let mut find_result = self.data.find(&rrset.name);
-        if find_result.flag == FindResultFlag::ExacatMatch {
-            if let Some(rdataset) = find_result.node.get_value_mut().as_mut() {
-                rdataset.delete_rdata(rrset)?;
-                if rdataset.is_empty() {
-                    let node = find_result.node;
-                    self.remove_node(&rrset.name, node);
-                }
-                Ok(())
-            } else {
-                Err(DataSrcError::RRsetNotFound(rrset.typ.to_string()).into())
+        ensure!(
+            find_result.flag == FindResultFlag::ExacatMatch,
+            "rdata with name {} doesn't exist",
+            rrset.name
+        );
+
+        if let Some(rdataset) = find_result.node.get_value_mut().as_mut() {
+            rdataset.delete_rdata(rrset)?;
+            if rdataset.is_empty() {
+                let node = find_result.node;
+                self.remove_node(&rrset.name, node);
             }
+            Ok(())
         } else {
-            Err(DataSrcError::NameNotFound(rrset.name.to_string()).into())
+            bail!("rrset with type {} doesn't exist", rrset.typ);
         }
     }
 
     fn update_rdata(&mut self, old_rrset: &RRset, new_rrset: RRset) -> Result<()> {
-        if !old_rrset.name.is_subdomain(&self.origin) {
-            return Err(DataSrcError::OutOfZone.into());
-        }
+        ensure!(
+            old_rrset.name.is_subdomain(&self.origin),
+            "update rdata is out of zone"
+        );
 
         let mut find_result = self.data.find(&old_rrset.name);
-        if find_result.flag == FindResultFlag::ExacatMatch {
-            if let Some(rdataset) = find_result.node.get_value_mut().as_mut() {
-                rdataset.update_rdata(old_rrset, new_rrset)?;
-                Ok(())
-            } else {
-                Err(DataSrcError::RRsetNotFound(old_rrset.typ.to_string()).into())
-            }
+        ensure!(
+            find_result.flag == FindResultFlag::ExacatMatch,
+            "rdata with name {} doesn't exist",
+            old_rrset.name
+        );
+
+        if let Some(rdataset) = find_result.node.get_value_mut().as_mut() {
+            rdataset.update_rdata(old_rrset, new_rrset)?;
+            Ok(())
         } else {
-            Err(DataSrcError::NameNotFound(old_rrset.name.to_string()).into())
+            bail!("rdata with type {} doesn't exist", old_rrset.typ);
         }
     }
 
     fn delete_domain(&mut self, name: &Name) -> Result<()> {
-        if !name.is_subdomain(&self.origin) {
-            return Err(DataSrcError::OutOfZone.into());
-        }
-
-        if name.eq(&self.origin) {
-            return Err(DataSrcError::ZoneOrginNotAllowToDelete.into());
-        }
+        ensure!(name.is_subdomain(&self.origin), "delete domain out of zone");
+        ensure!(!name.eq(&self.origin), "zone name isn't allowed to delete");
 
         let find_result = self.data.find(&name);
-        if find_result.flag == FindResultFlag::ExacatMatch {
-            let node = find_result.node;
-            self.remove_node(name, node);
-            Ok(())
-        } else {
-            Err(DataSrcError::NameNotFound(name.to_string()).into())
-        }
+        ensure!(
+            find_result.flag == FindResultFlag::ExacatMatch,
+            "name {} doesn't exist",
+            name
+        );
+
+        let node = find_result.node;
+        self.remove_node(name, node);
+        Ok(())
     }
 }
 

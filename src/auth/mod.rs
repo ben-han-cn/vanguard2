@@ -1,4 +1,3 @@
-mod error;
 mod rdataset;
 
 mod memory_zone;
@@ -13,6 +12,5 @@ mod zones;
 mod memory_zone_test;
 
 pub use auth_server::AuthServer;
-pub use error::AuthError;
 pub use zone::ZoneUpdater;
 pub use zones::AuthZone;

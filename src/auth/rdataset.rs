@@ -1,5 +1,4 @@
-use crate::auth::error::DataSrcError;
-use failure::Result;
+use anyhow::{bail, ensure, Result};
 use r53::{Name, RData, RRClass, RRTtl, RRType, RRset};
 use std::mem::swap;
 
@@ -31,10 +30,10 @@ impl Rdataset {
             self.merge_rrset(index, rrset);
         } else {
             if rrset.typ == RRType::CNAME && !self.rrsets.is_empty() {
-                return Err(DataSrcError::CNameCoExistsWithOtherRR.into());
+                bail!("add rrset conflict with cname record");
             }
             if rrset.typ != RRType::CNAME && self.get_rrset_tuple(RRType::CNAME).is_some() {
-                return Err(DataSrcError::CNameCoExistsWithOtherRR.into());
+                bail!("add cname conflict with other kind record");
             }
             self.rrsets.push((rrset.typ, rrset.ttl, rrset.rdatas));
         }
@@ -42,15 +41,12 @@ impl Rdataset {
     }
 
     pub fn validate_rrset(&self, rrset: &RRset) -> Result<()> {
-        if rrset.rdatas.len() == 0 {
-            Err(DataSrcError::RRsetHasNoRdata.into())
-        } else if (rrset.typ == RRType::CNAME || rrset.typ == RRType::SOA)
-            && rrset.rdatas.len() != 1
-        {
-            Err(DataSrcError::ExclusiveRRsetHasMoreThanOneRdata.into())
-        } else {
-            Ok(())
-        }
+        ensure!(rrset.rdatas.len() > 0, "rrset has no rdata record");
+        ensure!(
+            (rrset.typ == RRType::CNAME || rrset.typ == RRType::SOA) && rrset.rdatas.len() == 1,
+            "cname and soa can only have one rdata"
+        );
+        Ok(())
     }
 
     fn merge_rrset(&mut self, index: usize, mut rrset: RRset) {
@@ -79,7 +75,7 @@ impl Rdataset {
             self.rrsets.remove(index);
             Ok(())
         } else {
-            Err(DataSrcError::RRsetNotFound(typ.to_string()).into())
+            bail!("rrset with type {} doesn't exists", type);
         }
     }
 
@@ -93,7 +89,7 @@ impl Rdataset {
                 {
                     self.rrsets[index].2.remove(index_);
                 } else {
-                    return Err(DataSrcError::RdataNotFound(rdata.to_string()).into());
+                    bail!("rdata {} doesn't exist", rdata.to_string());
                 }
             }
 
@@ -102,7 +98,7 @@ impl Rdataset {
             }
             Ok(())
         } else {
-            Err(DataSrcError::RRsetNotFound(rrset.typ.to_string()).into())
+            bail!("rrset with type {} doesn't exist", rrset.typ);
         }
     }
 
@@ -119,12 +115,15 @@ impl Rdataset {
                         &mut new_rrset.rdatas[pos],
                     );
                 } else {
-                    return Err(DataSrcError::RdataNotFound(rdata.to_string()).into());
+                    bail!("rdata {} doesn't exist", rdata.to_string());
                 }
             }
             Ok(())
         } else {
-            Err(DataSrcError::RRsetNotFound(old_rrset.typ.to_string()).into())
+            bail!(
+                "rrset with type {} doesn't exist",
+                old_rrset.typ.to_string()
+            );
         }
     }
 

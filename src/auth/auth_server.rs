@@ -5,10 +5,9 @@ use std::error::Error;
 use std::fs;
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
-use tonic::transport::Server;
 
 #[derive(Clone)]
-pub struct AuthServer {
+struct AuthServer {
     zones: Arc<RwLock<AuthZone>>,
 }
 
