@@ -2,7 +2,7 @@ use crate::auth::memory_zone::MemoryZone;
 use crate::auth::zone::{FindOption, FindResult, FindResultType, ZoneFinder};
 use crate::auth::zone_loader::load_zone;
 use crate::types::Query;
-use anyhow::{ensure, Result};
+use anyhow::{bail, ensure, Result};
 use domaintree::{DomainTree, FindResultFlag};
 use r53::{HeaderFlag, Message, MessageBuilder, Name, RRType, Rcode};
 
@@ -19,7 +19,7 @@ impl AuthZone {
 
     pub fn add_zone(&mut self, name: Name, zone_content: &str) -> Result<()> {
         if self.get_exact_zone(&name).is_some() {
-            return Err(AuthError::DuplicateZone(name.to_string()).into());
+            bail!("duplicate zone {}", name.to_string());
         }
 
         let zone = load_zone(name.clone(), zone_content)?;

@@ -7,7 +7,6 @@ mod auth;
 mod cache;
 pub mod config;
 pub mod controller;
-mod error;
 mod forwarder;
 pub mod metrics;
 mod nameserver;

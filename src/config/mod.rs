@@ -1,4 +1,4 @@
-use crate::error::VgError;
+use anyhow;
 use serde::{Deserialize, Serialize};
 use std::{fs::File, io::prelude::*, path::Path};
 
@@ -19,7 +19,7 @@ pub struct VanguardConfig {
 }
 
 impl VanguardConfig {
-    pub fn load_config<P: AsRef<Path>>(path: P) -> Result<Self, VgError> {
+    pub fn load_config<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
         let path = path.as_ref();
         let mut file = File::open(path)?;
         let mut config_string = String::new();

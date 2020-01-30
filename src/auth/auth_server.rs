@@ -7,7 +7,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
 
 #[derive(Clone)]
-struct AuthServer {
+pub struct AuthServer {
     zones: Arc<RwLock<AuthZone>>,
 }
 

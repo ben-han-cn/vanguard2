@@ -1,4 +1,4 @@
-use bytes5::{Buf, BufMut, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 use r53::{Message, MessageRender};
 use std::io::{self, Cursor};
 use tokio_util::codec::{Decoder, Encoder};
@@ -22,7 +22,7 @@ impl Encoder for TcpStreamCoder {
     type Error = io::Error;
 
     fn encode(&mut self, message: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        message.rend(&mut self.render);
+        message.to_wire(&mut self.render);
         let buffer = self.render.take_data();
         dst.put_u16(buffer.len() as u16);
         dst.extend(buffer);

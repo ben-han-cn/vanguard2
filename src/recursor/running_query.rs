@@ -1,8 +1,7 @@
 use super::recursor::Recursor;
-use crate::error::VgError;
 use crate::nameserver::send_query;
 use crate::types::{classify_response, ResponseCategory};
-use failure;
+use anyhow::{self, bail};
 use r53::{message::SectionType, name, Message, MessageBuilder, Name, RRType, Rcode};
 use std::time::Duration;
 use tokio::time::timeout;
@@ -62,7 +61,7 @@ impl RunningQuery {
         return None;
     }
 
-    pub fn handle_response(&mut self, response: Message) -> failure::Result<Option<Message>> {
+    pub fn handle_response(&mut self, response: Message) -> anyhow::Result<Option<Message>> {
         let response_type = classify_response(&self.current_name, self.current_type, &response);
         match response_type {
             ResponseCategory::Answer
@@ -166,14 +165,14 @@ impl RunningQuery {
         return false;
     }
 
-    pub async fn handle_query(self) -> failure::Result<Message> {
+    pub async fn handle_query(self) -> anyhow::Result<Message> {
         match timeout(RECURSOR_TIMEOUT, self.do_recursive_query()).await {
-            Err(e) => Err(VgError::TimerErr(e.to_string()).into()),
+            Err(e) => bail!(e),
             Ok(result) => result,
         }
     }
 
-    async fn do_recursive_query(mut self) -> failure::Result<Message> {
+    async fn do_recursive_query(mut self) -> anyhow::Result<Message> {
         loop {
             if let Some(response) = self.lookup_in_cache() {
                 return Ok(response);
@@ -195,7 +194,7 @@ impl RunningQuery {
                     nameserver.unwrap()
                 } else {
                     if self.depth + 1 > MAX_QUERY_DEPTH {
-                        return Err(VgError::LoopedQuery.into());
+                        bail!("query depth is too big");
                     }
                     self.recursor
                         .nsas

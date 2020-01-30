@@ -1,6 +1,5 @@
-use crate::error::VgError;
 use crate::recursor::RecursiveResolver;
-use failure;
+use anyhow;
 use futures::{future, Future};
 use r53::{
     HeaderFlag, Message, MessageBuilder, Name, Opcode, RData, RRClass, RRTtl, RRType, RRset, Rcode,
@@ -53,7 +52,7 @@ impl RecursiveResolver for DumbResolver {
         &self,
         request: &Message,
         _depth: usize,
-    ) -> Pin<Box<dyn Future<Output = Result<Message, failure::Error>> + Send + 'static>> {
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Message>> + Send + 'static>> {
         let question = request.question.as_ref().unwrap();
         let name = question.name.clone();
         let typ = question.typ;
@@ -62,7 +61,7 @@ impl RecursiveResolver for DumbResolver {
             typ,
         }) {
             None => {
-                return Box::pin(future::err(VgError::Timeout("time out".to_string()).into()));
+                return Box::pin(future::err(anyhow::anyhow!("timeout")));
             }
             Some((ref answer, ref additional)) => {
                 let mut response = request.clone();

@@ -1,5 +1,6 @@
-use crate::auth::{AuthError, AuthZone, ZoneUpdater};
-use r53::{Name, RData, RRClass, RRTtl, RRType, RRset};
+use crate::auth::{AuthZone, ZoneUpdater};
+use anyhow::{self, bail};
+use r53::{util::StringBuffer, Name, RData, RRClass, RRTtl, RRType, RRset};
 use std::sync::{Arc, RwLock};
 use tonic::{transport::Server, Code, Request, Response, Status};
 
@@ -27,7 +28,7 @@ impl DynamicUpdateHandler {
 }
 
 impl DynamicUpdateHandler {
-    fn do_add_rrsets(&self, zone: &Name, rrsets: Vec<RRset>) -> Result<(), failure::Error> {
+    fn do_add_rrsets(&self, zone: &Name, rrsets: Vec<RRset>) -> anyhow::Result<()> {
         let mut zones = self.zones.write().unwrap();
         if let Some(zone) = zones.get_exact_zone(zone) {
             for rrset in rrsets {
@@ -35,11 +36,11 @@ impl DynamicUpdateHandler {
             }
             Ok(())
         } else {
-            Err(AuthError::UnknownZone(zone.to_string()).into())
+            bail!("unknown zone {}", zone.to_string());
         }
     }
 
-    fn do_delete_domains(&self, zone: &Name, names: Vec<Name>) -> Result<(), failure::Error> {
+    fn do_delete_domains(&self, zone: &Name, names: Vec<Name>) -> anyhow::Result<()> {
         let mut zones = self.zones.write().unwrap();
         if let Some(zone) = zones.get_exact_zone(zone) {
             for name in names {
@@ -47,7 +48,7 @@ impl DynamicUpdateHandler {
             }
             Ok(())
         } else {
-            Err(AuthError::UnknownZone(zone.to_string()).into())
+            bail!("unknown zone {}", zone.to_string());
         }
     }
 
@@ -55,7 +56,7 @@ impl DynamicUpdateHandler {
         &self,
         zone: &Name,
         rrset_headers: Vec<(Name, RRType)>,
-    ) -> Result<(), failure::Error> {
+    ) -> anyhow::Result<()> {
         let mut zones = self.zones.write().unwrap();
         if let Some(zone) = zones.get_exact_zone(zone) {
             for rrset_header in rrset_headers {
@@ -63,11 +64,11 @@ impl DynamicUpdateHandler {
             }
             Ok(())
         } else {
-            Err(AuthError::UnknownZone(zone.to_string()).into())
+            bail!("unknown zone {}", zone.to_string());
         }
     }
 
-    fn do_delete_rdatas(&self, zone: &Name, rrsets: Vec<RRset>) -> Result<(), failure::Error> {
+    fn do_delete_rdatas(&self, zone: &Name, rrsets: Vec<RRset>) -> anyhow::Result<()> {
         let mut zones = self.zones.write().unwrap();
         if let Some(zone) = zones.get_exact_zone(zone) {
             for rrset in rrsets {
@@ -75,7 +76,7 @@ impl DynamicUpdateHandler {
             }
             Ok(())
         } else {
-            Err(AuthError::UnknownZone(zone.to_string()).into())
+            bail!("unknown zone {}", zone.to_string());
         }
     }
 
@@ -84,12 +85,12 @@ impl DynamicUpdateHandler {
         zone: &Name,
         old_rrset: RRset,
         new_rrset: RRset,
-    ) -> Result<(), failure::Error> {
+    ) -> anyhow::Result<()> {
         let mut zones = self.zones.write().unwrap();
         if let Some(zone) = zones.get_exact_zone(zone) {
             zone.update_rdata(&old_rrset, new_rrset)
         } else {
-            Err(AuthError::UnknownZone(zone.to_string()).into())
+            bail!("unknown zone {}", zone.to_string());
         }
     }
 }
@@ -144,7 +145,7 @@ impl DynamicUpdateInterface for DynamicUpdateHandler {
 
         let rrsets = rrsets.iter().map(|rrset| proto_rrset_to_r53(rrset)).fold(
             Ok(Vec::new()),
-            |rrsets: Result<Vec<RRset>, failure::Error>, rrset| match rrsets {
+            |rrsets: anyhow::Result<Vec<RRset>>, rrset| match rrsets {
                 Ok(mut rrsets) => {
                     let rrset = rrset?;
                     rrsets.push(rrset);
@@ -194,7 +195,7 @@ impl DynamicUpdateInterface for DynamicUpdateHandler {
 
         let headers = rrsets.iter().fold(
             Ok(Vec::new()),
-            |headers: Result<Vec<(Name, RRType)>, failure::Error>, header| match headers {
+            |headers: anyhow::Result<Vec<(Name, RRType)>>, header| match headers {
                 Ok(mut headers) => {
                     let name = Name::new(header.name.as_ref())?;
                     headers.push((name, proto_typ_to_r53(header.r#type)));
@@ -225,7 +226,7 @@ impl DynamicUpdateInterface for DynamicUpdateHandler {
 
         let rrsets = rrsets.iter().map(|rrset| proto_rrset_to_r53(rrset)).fold(
             Ok(Vec::new()),
-            |rrsets: Result<Vec<RRset>, failure::Error>, rrset| match rrsets {
+            |rrsets: anyhow::Result<Vec<RRset>>, rrset| match rrsets {
                 Ok(mut rrsets) => {
                     let rrset = rrset?;
                     rrsets.push(rrset);
@@ -296,14 +297,15 @@ fn proto_typ_to_r53(typ: i32) -> RRType {
     }
 }
 
-fn proto_rrset_to_r53(rrset: &dynamic_dns::RRset) -> Result<RRset, failure::Error> {
+fn proto_rrset_to_r53(rrset: &dynamic_dns::RRset) -> anyhow::Result<RRset> {
     let name = Name::new(rrset.name.as_ref())?;
     let typ = proto_typ_to_r53(rrset.r#type);
     let rdatas = rrset.rdatas.iter().fold(
         Ok(Vec::new()),
-        |rdatas: Result<Vec<RData>, failure::Error>, rdata| match rdatas {
+        |rdatas: anyhow::Result<Vec<RData>>, rdata| match rdatas {
             Ok(mut rdatas) => {
-                let rdata = RData::from_str(typ, rdata)?;
+                let mut buf = StringBuffer::new(rdata);
+                let rdata = RData::from_str(typ, &mut buf)?;
                 rdatas.push(rdata);
                 Ok(rdatas)
             }

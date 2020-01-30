@@ -75,7 +75,7 @@ impl Rdataset {
             self.rrsets.remove(index);
             Ok(())
         } else {
-            bail!("rrset with type {} doesn't exists", type);
+            bail!("rrset with type {} doesn't exists", typ);
         }
     }
 

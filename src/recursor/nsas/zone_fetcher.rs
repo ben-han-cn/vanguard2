@@ -1,17 +1,14 @@
 use crate::recursor::{
     nsas::{
-        error,
         message_util::{message_to_nameserver_entry, message_to_zone_entry},
         nameserver_cache::{self, Nameserver, NameserverCache},
         zone_cache::ZoneCache,
     },
     RecursiveResolver,
 };
-use failure::Result;
+use anyhow::{self, bail};
 use r53::{Message, Name, RRType};
-use std::{
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 pub async fn fetch_zone<R: RecursiveResolver>(
     zone: Name,
@@ -19,16 +16,17 @@ pub async fn fetch_zone<R: RecursiveResolver>(
     nameservers: Arc<Mutex<NameserverCache>>,
     zones: Arc<Mutex<ZoneCache>>,
     depth: usize,
-    ) -> Result<Nameserver> {
-    let response = resolver.resolve(&Message::with_query(zone.clone(), RRType::NS), depth+1).await?;
+) -> anyhow::Result<Nameserver> {
+    let response = resolver
+        .resolve(&Message::with_query(zone.clone(), RRType::NS), depth + 1)
+        .await?;
     if let Ok((zone_entry, nameserver_entries)) = message_to_zone_entry(&zone, response) {
         if let Some(nameserver_entries) = nameserver_entries {
             {
                 let mut zones = zones.lock().unwrap();
                 zones.add_zone(zone_entry);
             }
-            let nameserver =
-                nameserver_cache::select_from_nameservers(&nameserver_entries);
+            let nameserver = nameserver_cache::select_from_nameservers(&nameserver_entries);
             let mut nameservers = nameservers.lock().unwrap();
             for nameserver_entry in nameserver_entries {
                 nameservers.add_nameserver(nameserver_entry);
@@ -50,7 +48,10 @@ pub async fn fetch_zone<R: RecursiveResolver>(
             debug_assert!(missing_names.is_some());
             let missing_names = missing_names.unwrap();
             for name in missing_names {
-                if let Ok(response) = resolver.resolve(&Message::with_query(name.clone(), RRType::A), depth+1).await {
+                if let Ok(response) = resolver
+                    .resolve(&Message::with_query(name.clone(), RRType::A), depth + 1)
+                    .await
+                {
                     if let Ok(entry) = message_to_nameserver_entry(name, response) {
                         let nameserver = entry.select_nameserver();
                         nameservers.lock().unwrap().add_nameserver(entry);
@@ -58,10 +59,10 @@ pub async fn fetch_zone<R: RecursiveResolver>(
                     }
                 }
             }
-            return Err(error::NSASError::NoValidNameserver.into());
+            bail!("no valid nameserver");
         }
     } else {
-        return Err(error::NSASError::InvalidNSResponse( "not valid ns response".to_string()).into());
+        bail!("no valid ns response");
     }
 }
 
@@ -98,13 +99,15 @@ mod test {
         assert_eq!(nameservers.lock().unwrap().len(), 0);
 
         let mut rt = Runtime::new().unwrap();
-        let select_nameserver = rt.block_on(fetch_zone(
+        let select_nameserver = rt
+            .block_on(fetch_zone(
                 Name::new("knet.cn").unwrap(),
                 resolver,
                 nameservers.clone(),
                 zones.clone(),
                 0,
-                )).unwrap();
+            ))
+            .unwrap();
         assert_eq!(select_nameserver.name, Name::new("ns1.knet.cn").unwrap());
         assert_eq!(select_nameserver.address, Ipv4Addr::new(1, 1, 1, 1));
 
@@ -139,13 +142,15 @@ mod test {
         let nameservers = Arc::new(Mutex::new(NameserverCache(LruCache::new(100))));
         let zones = Arc::new(Mutex::new(ZoneCache(LruCache::new(100))));
         let mut rt = Runtime::new().unwrap();
-        let select_nameserver = rt.block_on(fetch_zone(
+        let select_nameserver = rt
+            .block_on(fetch_zone(
                 Name::new("knet.cn").unwrap(),
                 resolver,
                 nameservers.clone(),
                 zones.clone(),
                 0,
-                )).unwrap();
+            ))
+            .unwrap();
 
         assert_eq!(select_nameserver.name, Name::new("ns3.knet.com").unwrap());
         assert_eq!(select_nameserver.address, Ipv4Addr::new(1, 1, 1, 1));
