@@ -1,0 +1,15 @@
+example.		 3600     IN     SOA	mname1. . 2000042795 20 20 1814400 3600
+example.		 3600     IN     NS	    a.example.
+a.example.		 3600     IN     A		73.80.65.49
+aaaa.example.	 3600     IN     AAAA	ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+cname.example.	 3600     IN     CNAME	cname-target.
+mx.example.		 3600     IN     MX	    10 mail.example.
+mail.example.	 600      IN     A      2.2.2.2
+naptr.example.	 600      IN     NAPTR	65535 65535 "blurgh" "blorf" ":(.*):\\1:" foo.
+ptr.example.	 3600     IN     PTR	foo.net.
+srv.example.	 1200     IN     SRV	65535 65535 65535 old-slow-box.example.com.
+txt1.example.	 3600     IN     TXT	"foo foo foo"
+txt2.example.	 3600     IN     TXT	"foo" "bar"
+txt3.example.	 600      IN     TXT	"foo bar"
+txt4.example.	 3600     IN     TXT	"foo\010bar"
+txt5.example.	 600      IN     TXT	"\"foo\""

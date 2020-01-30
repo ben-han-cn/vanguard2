@@ -42,10 +42,15 @@ impl Rdataset {
 
     pub fn validate_rrset(&self, rrset: &RRset) -> Result<()> {
         ensure!(rrset.rdatas.len() > 0, "rrset has no rdata record");
-        ensure!(
-            (rrset.typ == RRType::CNAME || rrset.typ == RRType::SOA) && rrset.rdatas.len() == 1,
-            "cname and soa can only have one rdata"
-        );
+        if rrset.typ == RRType::CNAME || rrset.typ == RRType::SOA {
+            if rrset.rdatas.len() != 1 {
+                bail!(
+                    "{} should only have one rdata but get {}",
+                    rrset.typ,
+                    rrset.rdatas.len(),
+                );
+            }
+        }
         Ok(())
     }
 

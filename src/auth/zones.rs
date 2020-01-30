@@ -85,7 +85,7 @@ impl AuthZone {
             }
             FindResultType::NXRRset => {
                 builder
-                    .rcode(Rcode::NXRRset)
+                    .rcode(Rcode::NoError)
                     .add_auth(result.get_apex_soa());
             }
         }

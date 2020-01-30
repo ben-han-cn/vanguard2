@@ -15,9 +15,9 @@ impl AuthServer {
     pub fn new(conf: &AuthorityConfig) -> Self {
         let mut zones = AuthZone::new();
         for zone_conf in conf.zones.iter() {
-            let zone_cotent = fs::read_to_string(&zone_conf.file_path).unwrap();
+            let zone_content = fs::read_to_string(&zone_conf.file_path).unwrap();
             zones
-                .add_zone(Name::new(&zone_conf.name).unwrap(), &zone_cotent)
+                .add_zone(Name::new(&zone_conf.name).unwrap(), &zone_content)
                 .unwrap();
         }
         AuthServer {
