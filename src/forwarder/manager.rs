@@ -3,16 +3,14 @@ use super::{
     group::{ForwarderGroup, ForwarderPool},
 };
 use crate::{
-    types::Query,
     config::ForwarderConfig,
-    nameserver::{NameserverStore, send_query},
+    nameserver::{send_query, NameserverStore},
+    types::Query,
 };
-use failure;
+use anyhow;
 use domaintree::DomainTree;
 use r53::Message;
-use std::{
-    sync::{Arc, RwLock},
-};
+use std::sync::{Arc, RwLock};
 
 #[derive(Clone)]
 pub struct ForwarderManager {
@@ -31,11 +29,13 @@ impl ForwarderManager {
         }
     }
 
-    pub async fn handle_query(&self, query: &Query) -> Result<Option<Message>, failure::Error> {
+    pub async fn handle_query(&self, query: &Query) -> anyhow::Result<Option<Message>> {
         if let Some(forwarder) = self.select_nameserver(query) {
             let question = query.question();
             let mut tmp_query = Message::with_query(question.name.clone(), question.typ);
-            tmp_query.header.set_flag(r53::HeaderFlag::RecursionDesired, true);
+            tmp_query
+                .header
+                .set_flag(r53::HeaderFlag::RecursionDesired, true);
             let mut response = send_query(&tmp_query, forwarder, self.clone()).await?;
             response.header.id = query.request().header.id;
             Ok(Some(response))

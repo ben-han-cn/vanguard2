@@ -1,6 +1,5 @@
 mod address_entry;
 mod entry_key;
-mod error;
 mod message_util;
 mod nameserver_cache;
 mod nameserver_fetcher;

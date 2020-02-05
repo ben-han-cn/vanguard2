@@ -1,9 +1,8 @@
 use crate::recursor::nsas::{
-    address_entry::AddressEntry, error::NSASError, nameserver_cache::NameserverEntry,
-    zone_cache::ZoneEntry,
+    address_entry::AddressEntry, nameserver_cache::NameserverEntry, zone_cache::ZoneEntry,
 };
 use crate::types::{classify_response, ResponseCategory};
-use failure::Result;
+use anyhow::{bail, Result};
 use r53::{message::SectionType, Message, Name, RData, RRType, RRset};
 use std::{net::IpAddr, time::Duration};
 
@@ -19,9 +18,7 @@ pub fn message_to_zone_entry(
     } else if category == ResponseCategory::Referral {
         msg.take_section(SectionType::Authority).unwrap()
     } else {
-        return Err(
-            NSASError::InvalidNSResponse("ns query doesn't return answer".to_string()).into(),
-        );
+        bail!("ns query doesn't return answer");
     };
 
     let glue = msg.take_section(SectionType::Additional);
@@ -73,10 +70,7 @@ pub fn message_to_zone_entry(
     };
 
     if nameservers.is_none() && names.iter().all(|n| n.is_subdomain(&zone)) {
-        return Err(NSASError::InvalidNSResponse(
-            "subdomain ns has no related v4 glue".to_string(),
-        )
-        .into());
+        bail!("subdomain ns has no related v4 glue");
     }
     Ok((
         ZoneEntry::new(zone, names, Duration::new(answer[0].ttl.0 as u64, 0)),
@@ -87,10 +81,7 @@ pub fn message_to_zone_entry(
 pub fn message_to_nameserver_entry(nameserver: Name, msg: Message) -> Result<NameserverEntry> {
     let category = classify_response(&nameserver, RRType::A, &msg);
     if category != ResponseCategory::Answer {
-        return Err(NSASError::InvalidNSResponse(
-            "address query doesn't return answer".to_string(),
-        )
-        .into());
+        bail!("address query doesn't return answer");
     }
     let answer = msg.section(SectionType::Answer).unwrap();
     Ok(NameserverEntry::new(

@@ -1,4 +1,4 @@
-use failure::Result;
+use anyhow::Result;
 use r53::{Name, RRType, RRset};
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]

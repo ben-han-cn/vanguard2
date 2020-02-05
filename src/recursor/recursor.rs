@@ -1,6 +1,6 @@
 use super::{nsas::NSAddressStore, roothint::RootHint, running_query::RunningQuery};
 use crate::{cache::MessageCache, config::RecursorConfig};
-use failure;
+use anyhow;
 use futures::Future;
 use r53::Message;
 use std::pin::Pin;
@@ -11,7 +11,7 @@ pub trait RecursiveResolver: Clone + Send {
         &self,
         request: &Message,
         depth: usize,
-    ) -> Pin<Box<dyn Future<Output = Result<Message, failure::Error>> + Send>>;
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Message>> + Send>>;
 }
 
 #[derive(Clone)]
@@ -33,7 +33,7 @@ impl Recursor {
     pub fn handle_query(
         &self,
         query: &Message,
-    ) -> Pin<Box<dyn Future<Output = Result<Message, failure::Error>> + Send>> {
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Message>> + Send>> {
         self.resolve(query, 0)
     }
 }
@@ -43,7 +43,7 @@ impl RecursiveResolver for Recursor {
         &self,
         query: &Message,
         depth: usize,
-    ) -> Pin<Box<dyn Future<Output = Result<Message, failure::Error>> + Send>> {
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Message>> + Send>> {
         Box::pin(RunningQuery::new(query, self.clone(), depth).handle_query())
     }
 }

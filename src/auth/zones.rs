@@ -1,10 +1,9 @@
-use crate::auth::error::AuthError;
 use crate::auth::memory_zone::MemoryZone;
 use crate::auth::zone::{FindOption, FindResult, FindResultType, ZoneFinder};
 use crate::auth::zone_loader::load_zone;
 use crate::types::Query;
+use anyhow::{bail, ensure, Result};
 use domaintree::{DomainTree, FindResultFlag};
-use failure::Result;
 use r53::{HeaderFlag, Message, MessageBuilder, Name, RRType, Rcode};
 
 pub struct AuthZone {
@@ -20,7 +19,7 @@ impl AuthZone {
 
     pub fn add_zone(&mut self, name: Name, zone_content: &str) -> Result<()> {
         if self.get_exact_zone(&name).is_some() {
-            return Err(AuthError::DuplicateZone(name.to_string()).into());
+            bail!("duplicate zone {}", name.to_string());
         }
 
         let zone = load_zone(name.clone(), zone_content)?;
@@ -30,9 +29,11 @@ impl AuthZone {
 
     pub fn delete_zone(&mut self, name: &Name) -> Result<()> {
         let result = self.zones.find(name);
-        if result.flag != FindResultFlag::ExacatMatch {
-            return Err(AuthError::UnknownZone(name.to_string()).into());
-        }
+        ensure!(
+            result.flag == FindResultFlag::ExacatMatch,
+            "zone {} doesn't exist",
+            name.to_string()
+        );
         let target = result.node;
         self.zones.remove_node(target);
         Ok(())
@@ -84,7 +85,7 @@ impl AuthZone {
             }
             FindResultType::NXRRset => {
                 builder
-                    .rcode(Rcode::NXRRset)
+                    .rcode(Rcode::NoError)
                     .add_auth(result.get_apex_soa());
             }
         }

@@ -9,7 +9,7 @@ use crate::recursor::{
     },
     RecursiveResolver,
 };
-use failure;
+use anyhow;
 use lru::LruCache;
 use r53::Name;
 use std::{
@@ -47,27 +47,28 @@ impl NSAddressStore {
     }
 
     //this must be invoked in a future
-    pub fn get_nameserver(
-        &self,
-        zone: &Name,
-    ) -> (Option<Nameserver>, Option<Vec<Name>>) {
+    pub fn get_nameserver(&self, zone: &Name) -> (Option<Nameserver>, Option<Vec<Name>>) {
         let key = &EntryKey::from_name(zone);
-        let (nameserver, missing_nameserver) = self.zones
+        let (nameserver, missing_nameserver) = self
+            .zones
             .lock()
             .unwrap()
             .get_nameserver(key, &mut self.nameservers.lock().unwrap());
 
-        (nameserver, if missing_nameserver.is_none() {
-            None
-        } else {
-            self.missing_server_to_probe(missing_nameserver.unwrap()) 
-        })
+        (
+            nameserver,
+            if missing_nameserver.is_none() {
+                None
+            } else {
+                self.missing_server_to_probe(missing_nameserver.unwrap())
+            },
+        )
     }
 
-    pub async fn probe_missing_nameserver<R: RecursiveResolver+ Send>(
+    pub async fn probe_missing_nameserver<R: RecursiveResolver + Send>(
         self,
         missing_nameserver: Vec<Name>,
-        resolver: R
+        resolver: R,
     ) {
         println!(
             "start to probe {:?}, waiting queue len is {}",
@@ -75,7 +76,13 @@ impl NSAddressStore {
             self.probing_name_servers.lock().unwrap().len()
         );
 
-        fetch_nameserver_address(missing_nameserver.clone(), self.nameservers.clone(), resolver, 0).await;
+        fetch_nameserver_address(
+            missing_nameserver.clone(),
+            self.nameservers.clone(),
+            resolver,
+            0,
+        )
+        .await;
 
         let mut probing_name_servers = self.probing_name_servers.lock().unwrap();
         missing_nameserver.into_iter().for_each(|n| {
@@ -87,16 +94,21 @@ impl NSAddressStore {
         &self,
         zone: Name,
         resolver: R,
-        depth: usize) -> failure::Result<Nameserver> {
-        fetch_zone(zone, resolver, self.nameservers.clone(), self.zones.clone(), depth).await
+        depth: usize,
+    ) -> anyhow::Result<Nameserver> {
+        fetch_zone(
+            zone,
+            resolver,
+            self.nameservers.clone(),
+            self.zones.clone(),
+            depth,
+        )
+        .await
     }
 
-    fn missing_server_to_probe(
-        &self,
-        missing_nameserver: Vec<Name>,
-    ) -> Option<Vec<Name>>{
+    fn missing_server_to_probe(&self, missing_nameserver: Vec<Name>) -> Option<Vec<Name>> {
         if self.probing_name_servers.lock().unwrap().len() >= MAX_PROBING_NAMESERVER_COUNT {
-            return None
+            return None;
         }
 
         let missing_nameserver = {
@@ -118,7 +130,6 @@ impl NSAddressStore {
             Some(missing_nameserver)
         }
     }
-
 }
 
 impl NameserverStore for NSAddressStore {

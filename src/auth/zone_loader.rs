@@ -1,6 +1,6 @@
 use crate::auth::memory_zone::MemoryZone;
 use crate::auth::zone::ZoneUpdater;
-use failure::Result;
+use anyhow::Result;
 use r53::{Name, RRset};
 use std::str::FromStr;
 

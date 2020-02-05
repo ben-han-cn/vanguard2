@@ -20,7 +20,7 @@ impl Encoder for UdpStreamCoder {
     type Error = io::Error;
 
     fn encode(&mut self, message: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        message.rend(&mut self.render);
+        message.to_wire(&mut self.render);
         dst.extend(self.render.data());
         self.render.clear();
         Ok(())
