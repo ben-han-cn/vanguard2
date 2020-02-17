@@ -28,7 +28,7 @@ impl<H: QueryHandler + Send + Sync> TcpServer<H> {
                 while let Ok(Some(Ok(request))) = timeout(DEFAULT_RECV_TIMEOUT, stream.next()).await
                 {
                     let query = Query::new(request, src);
-                    if let Some(response) = handler.clone().handle_query(&query).await {
+                    if let Ok(response) = handler.clone().handle_query(query).await {
                         stream.send(response).await;
                     }
                 }

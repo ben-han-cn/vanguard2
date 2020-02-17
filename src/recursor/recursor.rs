@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 
 pub trait RecursiveResolver: Clone + Send {
     fn resolve(
-        &self,
+        &mut self,
         request: &Message,
         depth: usize,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<Message>> + Send>>;
@@ -31,7 +31,7 @@ impl Recursor {
     }
 
     pub fn handle_query(
-        &self,
+        &mut self,
         query: &Message,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<Message>> + Send>> {
         self.resolve(query, 0)
@@ -40,7 +40,7 @@ impl Recursor {
 
 impl RecursiveResolver for Recursor {
     fn resolve(
-        &self,
+        &mut self,
         query: &Message,
         depth: usize,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<Message>> + Send>> {

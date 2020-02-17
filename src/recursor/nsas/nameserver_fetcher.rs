@@ -1,29 +1,28 @@
 use crate::recursor::{
-    nsas::{
-        message_util::{message_to_nameserver_entry},
-        nameserver_cache::{NameserverCache},
-    },
+    nsas::{message_util::message_to_nameserver_entry, nameserver_cache::NameserverCache},
     RecursiveResolver,
 };
 use r53::{Message, Name, RRType};
-use std::{
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
-pub async fn fetch_nameserver_address<R: RecursiveResolver> (names: Vec<Name>, nameservers: Arc<Mutex<NameserverCache>>, resolver: R, depth: usize) {
+pub async fn fetch_nameserver_address<R: RecursiveResolver>(
+    names: Vec<Name>,
+    nameservers: Arc<Mutex<NameserverCache>>,
+    resolver: &mut R,
+    depth: usize,
+) {
     for name in names {
-        match resolver.resolve(&Message::with_query(name.clone(), RRType::A), depth+1).await {
-            Ok(response) => { 
+        match resolver
+            .resolve(&Message::with_query(name.clone(), RRType::A), depth + 1)
+            .await
+        {
+            Ok(response) => {
                 if let Ok(entry) = message_to_nameserver_entry(name, response) {
                     nameservers.lock().unwrap().add_nameserver(entry);
                 }
             }
             Err(e) => {
-                eprintln!(
-                    "probe {:?} failed {:?}",
-                    name,
-                    e
-                );
+                eprintln!("probe {:?} failed {:?}", name, e);
             }
         }
     }
@@ -58,7 +57,12 @@ mod test {
         let nameservers = Arc::new(Mutex::new(NameserverCache(LruCache::new(100))));
         assert_eq!(nameservers.lock().unwrap().len(), 0);
         let mut rt = Runtime::new().unwrap();
-        rt.block_on(fetch_nameserver_address(names, nameservers.clone(), resolver, 0));
+        rt.block_on(fetch_nameserver_address(
+            names,
+            nameservers.clone(),
+            resolver,
+            0,
+        ));
         assert_eq!(nameservers.lock().unwrap().len(), 3);
     }
 }

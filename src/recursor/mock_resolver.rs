@@ -49,7 +49,7 @@ impl DumbResolver {
 
 impl RecursiveResolver for DumbResolver {
     fn resolve(
-        &self,
+        &mut self,
         request: &Message,
         _depth: usize,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<Message>> + Send + 'static>> {

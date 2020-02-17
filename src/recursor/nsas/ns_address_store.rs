@@ -68,7 +68,7 @@ impl NSAddressStore {
     pub async fn probe_missing_nameserver<R: RecursiveResolver + Send>(
         self,
         missing_nameserver: Vec<Name>,
-        resolver: R,
+        mut resolver: R,
     ) {
         println!(
             "start to probe {:?}, waiting queue len is {}",
@@ -79,7 +79,7 @@ impl NSAddressStore {
         fetch_nameserver_address(
             missing_nameserver.clone(),
             self.nameservers.clone(),
-            resolver,
+            &mut resolver,
             0,
         )
         .await;
@@ -93,7 +93,7 @@ impl NSAddressStore {
     pub async fn fetch_nameserver<R: RecursiveResolver>(
         &self,
         zone: Name,
-        resolver: R,
+        resolver: &mut R,
         depth: usize,
     ) -> anyhow::Result<Nameserver> {
         fetch_zone(

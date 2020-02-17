@@ -185,7 +185,7 @@ impl RunningQuery {
                     .get_nameserver(&self.current_zone.as_ref().unwrap());
                 if missing_nameserver.is_some() {
                     let nsas = self.recursor.nsas.clone();
-                    let resolver = self.recursor.clone();
+                    let mut resolver = self.recursor.clone();
                     tokio::spawn(
                         nsas.probe_missing_nameserver(missing_nameserver.unwrap(), resolver),
                     );
@@ -196,11 +196,12 @@ impl RunningQuery {
                     if self.depth + 1 > MAX_QUERY_DEPTH {
                         bail!("query depth is too big");
                     }
+                    let mut resolver = self.recursor.clone();
                     self.recursor
                         .nsas
                         .fetch_nameserver(
                             self.current_zone.as_ref().unwrap().clone(),
-                            self.recursor.clone(),
+                            &mut resolver,
                             self.depth + 1,
                         )
                         .await?

@@ -1,7 +1,5 @@
 use r53::{question::Question, Message};
-use std::future::Future;
 use std::net::SocketAddr;
-use std::pin::Pin;
 
 #[derive(Debug, Clone)]
 pub struct Query {
@@ -28,11 +26,4 @@ impl Query {
     pub fn question(&self) -> &Question {
         self.request().question.as_ref().unwrap()
     }
-}
-
-pub trait QueryHandler: Send + Clone + 'static {
-    fn handle_query(
-        self,
-        query: &Query,
-    ) -> Pin<Box<dyn Future<Output = Option<Message>> + Send + '_>>;
 }

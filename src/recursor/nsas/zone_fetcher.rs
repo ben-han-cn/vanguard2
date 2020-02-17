@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 
 pub async fn fetch_zone<R: RecursiveResolver>(
     zone: Name,
-    resolver: R,
+    resolver: &mut R,
     nameservers: Arc<Mutex<NameserverCache>>,
     zones: Arc<Mutex<ZoneCache>>,
     depth: usize,

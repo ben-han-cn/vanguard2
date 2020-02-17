@@ -28,7 +28,7 @@ impl<H: QueryHandler> UdpServer<H> {
         UdpServer { handler }
     }
 
-    pub async fn run(&self, addr: SocketAddr) {
+    pub async fn run(&mut self, addr: SocketAddr) {
         let socket = UdpSocket::bind(addr).await.unwrap();
         let (mut send_stream, mut recv_stream) =
             UdpFramed::new(socket, UdpStreamCoder::new()).split();
@@ -45,11 +45,11 @@ impl<H: QueryHandler> UdpServer<H> {
             if let Some(Ok((request, src))) = recv_stream.next().await {
                 QC_UDP_INT_COUNT.inc();
                 let mut sender_back = sender.clone();
-                let handler = self.handler.clone();
+                let mut handler = self.handler.clone();
                 tokio::spawn(async move {
                     let query = Query::new(request, src);
-                    if let Some(response) = handler.handle_query(&query).await {
-                        sender_back.try_send((response, query.client()));
+                    if let Ok(response) = handler.handle_query(query).await {
+                        sender_back.try_send((response, src));
                     }
                 });
             }

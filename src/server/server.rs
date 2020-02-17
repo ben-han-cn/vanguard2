@@ -14,8 +14,8 @@ impl Server {
     }
 
     pub async fn run<H: QueryHandler + Send + Sync>(&self, handler: H) {
-        let udp_server = UdpServer::new(handler.clone());
-        let tcp_server = TcpServer::new(handler);
+        let mut udp_server = UdpServer::new(handler.clone());
+        let mut tcp_server = TcpServer::new(handler);
         tokio::spawn(tcp_server.run(self.addr));
         udp_server.run(self.addr).await
     }
