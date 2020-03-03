@@ -8,6 +8,7 @@ mod cache;
 pub mod config;
 pub mod controller;
 mod forwarder;
+mod iterator;
 pub mod metrics;
 mod nameserver;
 mod recursor;

@@ -72,4 +72,8 @@ impl MessageCache {
     pub fn get_deepest_ns(&mut self, name: &Name) -> Option<Name> {
         self.positive_cache.get_deepest_ns(name)
     }
+
+    pub fn get_rrset(&mut self, name: &Name, typ: RRType) -> Option<RRset> {
+        self.positive_cache.get_rrset(name, typ)
+    }
 }

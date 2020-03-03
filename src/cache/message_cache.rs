@@ -74,6 +74,10 @@ impl MessageLruCache {
     pub fn add_rrset(&mut self, rrset: RRset, trust_level: RRsetTrustLevel) {
         self.rrset_cache.add_rrset(rrset, trust_level);
     }
+
+    pub fn get_rrset(&mut self, name: &Name, typ: RRType) -> Option<RRset> {
+        self.rrset_cache.get_rrset(name, typ)
+    }
 }
 
 #[cfg(test)]
