@@ -40,9 +40,8 @@ impl RunningQuery {
     fn lookup_in_cache(&mut self) -> Option<Message> {
         let current_query = Message::with_query(self.current_name.clone(), self.current_type);
 
-        //let cache = self.recursor.cache.clone();
-        //let mut cache = cache.lock().unwrap();
-        let mut cache = self.recursor.cache.lock().unwrap();
+        let cache = self.recursor.cache.clone();
+        let mut cache = cache.lock().unwrap();
         if let Some(response) = cache.gen_response(&current_query) {
             let response = self.make_response(response);
             let origin_query_name = &response.question.as_ref().unwrap().name;

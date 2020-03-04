@@ -102,7 +102,7 @@ mod test {
         let select_nameserver = rt
             .block_on(fetch_zone(
                 Name::new("knet.cn").unwrap(),
-                resolver,
+                &mut resolver,
                 nameservers.clone(),
                 zones.clone(),
                 0,
@@ -145,7 +145,7 @@ mod test {
         let select_nameserver = rt
             .block_on(fetch_zone(
                 Name::new("knet.cn").unwrap(),
-                resolver,
+                &mut resolver,
                 nameservers.clone(),
                 zones.clone(),
                 0,

@@ -47,6 +47,10 @@ impl DelegationPoint {
         Some(DelegationPoint::new(zone, &ns, &glues))
     }
 
+    pub fn zone(&self) -> &Name {
+        &self.zone
+    }
+
     pub fn add_glue(&mut self, glue: &RRset) {
         if let Some(hosts_) = self.server_and_hosts.get_mut(&glue.name) {
             let mut hosts = glue
@@ -84,5 +88,84 @@ impl DelegationPoint {
             }
         }
         missing_names
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::host_selector::{Host, HostSelector};
+    use super::DelegationPoint;
+    use r53::{Name, RRset};
+    use std::str::FromStr;
+    use std::time::Duration;
+
+    fn merge_rrset(mut rrset1: RRset, mut rrset2: RRset) -> RRset {
+        assert!(rrset1.is_same_rrset(&rrset2));
+        rrset1.rdatas.append(&mut rrset2.rdatas);
+        rrset1
+    }
+
+    #[test]
+    fn test_delegation_point_new() {
+        let zone = Name::new("com").unwrap();
+        let ns1 = RRset::from_str("com. 3600  IN NS ns1.com").unwrap();
+        let ns2 = RRset::from_str("com. 3600  IN NS ns2.com").unwrap();
+        let ns = merge_rrset(ns1, ns2);
+
+        let glue1 = RRset::from_str("ns1.com. 3600  IN A 1.1.1.1").unwrap();
+        let glue2 = RRset::from_str("ns2.com. 3600  IN A 2.2.2.2").unwrap();
+
+        let dp = DelegationPoint::new(zone, &ns, &vec![glue1, glue2]);
+        assert!(dp.get_missing_server().is_empty());
+    }
+
+    #[test]
+    fn test_missing_server() {
+        let zone = Name::new("com").unwrap();
+        let ns1 = RRset::from_str("com. 3600  IN NS ns1.com").unwrap();
+        let ns2 = RRset::from_str("com. 3600  IN NS ns2.com").unwrap();
+        let ns = merge_rrset(ns1, ns2);
+
+        let glue1 = RRset::from_str("ns1.com. 3600  IN A 1.1.1.1").unwrap();
+
+        let dp = DelegationPoint::new(zone, &ns, &vec![glue1]);
+        assert_eq!(dp.get_missing_server()[0], &Name::new("ns2.com.").unwrap());
+    }
+
+    struct DumbSelector;
+    impl HostSelector for DumbSelector {
+        fn set_rtt(&mut self, host: Host, rtt: Duration) {}
+        //assume hosts isn't empty
+        fn select(&self, hosts: &[Host]) -> Host {
+            hosts[0]
+        }
+    }
+
+    #[test]
+    fn test_select_target() {
+        let zone = Name::new("com").unwrap();
+        let ns = RRset::from_str("com. 3600  IN NS ns1.com").unwrap();
+
+        let glue1 = RRset::from_str("ns1.com. 3600  IN A 2.2.2.2").unwrap();
+        let glue2 = RRset::from_str("ns1.com. 3600  IN A 1.1.1.1").unwrap();
+        let glue3 = RRset::from_str("ns1.com. 3600  IN A 3.3.3.3").unwrap();
+        let glue = merge_rrset(merge_rrset(glue1, glue2), glue3);
+
+        let dp = DelegationPoint::new(zone, &ns, &vec![glue]);
+        let host = dp.get_target(&DumbSelector).unwrap();
+        assert_eq!(host.to_string(), "2.2.2.2");
+
+        let zone = Name::new("com").unwrap();
+        let mut dp = DelegationPoint::new(zone, &ns, &Vec::new());
+        let host = dp.get_target(&DumbSelector);
+        assert!(host.is_none());
+        let glue = RRset::from_str("ns2.com. 3600  IN A 1.1.1.1").unwrap();
+        dp.add_glue(&glue);
+        let host = dp.get_target(&DumbSelector);
+        assert!(host.is_none());
+        let glue = RRset::from_str("ns1.com. 3600  IN A 1.1.1.1").unwrap();
+        dp.add_glue(&glue);
+        let host = dp.get_target(&DumbSelector).unwrap();
+        assert_eq!(host.to_string(), "1.1.1.1");
     }
 }

@@ -68,3 +68,24 @@ impl HostSelector for RTTBasedHostSelector {
         hosts[index]
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Host, HostSelector, RTTBasedHostSelector};
+    use std::{
+        net::{IpAddr, Ipv4Addr},
+        time::Duration,
+    };
+
+    #[test]
+    fn test_rtt_based_selector() {
+        let mut selector = RTTBasedHostSelector::new(10);
+        let host1 = IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1));
+        let host2 = IpAddr::V4(Ipv4Addr::new(2, 2, 2, 2));
+        selector.set_rtt(host1, Duration::from_secs(10));
+        selector.set_rtt(host2, Duration::from_secs(11));
+        assert_eq!(selector.select(vec![host1, host2].as_ref()), host1);
+        selector.set_rtt(host1, Duration::from_secs(12));
+        assert_eq!(selector.select(vec![host1, host2].as_ref()), host2);
+    }
+}

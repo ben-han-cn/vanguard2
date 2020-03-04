@@ -16,7 +16,7 @@ const DEFAULT_RECV_BUF_SIZE: usize = 1024;
 pub async fn send_query<S: HostSelector>(
     request: &Message,
     target: Host,
-    selector: &mut HostSelector,
+    mut selector: S,
 ) -> anyhow::Result<Message> {
     let mut render = MessageRender::new();
     request.to_wire(&mut render);

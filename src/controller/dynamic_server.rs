@@ -304,8 +304,7 @@ fn proto_rrset_to_r53(rrset: &dynamic_dns::RRset) -> anyhow::Result<RRset> {
         Ok(Vec::new()),
         |rdatas: anyhow::Result<Vec<RData>>, rdata| match rdatas {
             Ok(mut rdatas) => {
-                let mut buf = StringBuffer::new(rdata);
-                let rdata = RData::from_str(typ, &mut buf)?;
+                let rdata = RData::from_str(typ, rdata)?;
                 rdatas.push(rdata);
                 Ok(rdatas)
             }

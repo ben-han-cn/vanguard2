@@ -60,7 +60,7 @@ mod test {
         rt.block_on(fetch_nameserver_address(
             names,
             nameservers.clone(),
-            resolver,
+            &mut resolver,
             0,
         ));
         assert_eq!(nameservers.lock().unwrap().len(), 3);
