@@ -6,29 +6,33 @@ use anyhow;
 use r53::{message::SectionType, name::root, Message, MessageBuilder, RRType, RRset, Rcode};
 
 use super::delegation_point::DelegationPoint;
-use super::host_selector::{Host, HostSelector};
+use super::host_selector::{Host, HostSelector, RTTBasedHostSelector};
 use super::iter_event::{IterEvent, QueryState, ResponseType};
-use super::nsclient::send_query;
+use super::nsclient::NSClient;
 use super::roothint::RootHint;
 use crate::cache::MessageCache;
 use crate::types::{classify_response, ResponseCategory};
 
 const MAX_CNAME_REDIRECT_COUNT: u8 = 8;
 const MAX_DEPENDENT_QUERY_COUNT: u8 = 4;
+const MAX_REFERRAL_COUNT: u8 = 30;
 
 #[derive(Clone)]
-pub struct Iterator<S> {
+pub struct Iterator {
     cache: Arc<Mutex<MessageCache>>,
     roothint: Arc<RootHint>,
-    host_selector: Arc<Mutex<S>>,
+    host_selector: Arc<Mutex<RTTBasedHostSelector>>,
+    client: NSClient,
 }
 
-impl<S: HostSelector + 'static + Send + Clone> Iterator<S> {
-    pub fn new(cache: Arc<Mutex<MessageCache>>, selector: S) -> Self {
+impl Iterator {
+    pub fn new(cache: Arc<Mutex<MessageCache>>) -> Self {
+        let host_selector = Arc::new(Mutex::new(RTTBasedHostSelector::new(10000)));
         Self {
             cache: cache.clone(),
             roothint: Arc::new(RootHint::new()),
-            host_selector: Arc::new(Mutex::new(selector)),
+            host_selector: host_selector.clone(),
+            client: NSClient::new(host_selector),
         }
     }
 
@@ -41,23 +45,21 @@ impl<S: HostSelector + 'static + Send + Clone> Iterator<S> {
 
     async fn handle_query(mut self, query: Message) -> anyhow::Result<Message> {
         let mut event = IterEvent::new(query, QueryState::InitQuery, QueryState::Finished);
-        let mut done = false;
         loop {
             event = match event.get_state() {
-                QueryState::InitQuery => self.process_init_query(event).await,
+                QueryState::InitQuery => self.process_init_query(event),
                 QueryState::QueryTarget => self.process_query_target(event).await,
                 QueryState::QueryResponse => self.process_query_response(event),
                 QueryState::PrimeResponse => self.process_prime_response(event),
                 QueryState::TargetResponse => self.process_target_response(event),
                 QueryState::Finished => {
-                    self.process_finished(&mut event);
-                    return Ok(event.get_response().unwrap());
+                    return Ok(self.process_finished(event));
                 }
             };
         }
     }
 
-    async fn process_init_query(&mut self, mut event: IterEvent) -> IterEvent {
+    fn process_init_query(&mut self, mut event: IterEvent) -> IterEvent {
         if event.query_restart_count > MAX_CNAME_REDIRECT_COUNT {
             self.error_response(&mut event, Rcode::ServFail);
             return event;
@@ -71,7 +73,7 @@ impl<S: HostSelector + 'static + Send + Clone> Iterator<S> {
         if self.lookup_cache(&mut event) {
             return event;
         } else {
-            return self.prime_root(event).await;
+            return self.prime_root(event);
         }
     }
 
@@ -103,41 +105,27 @@ impl<S: HostSelector + 'static + Send + Clone> Iterator<S> {
         }
     }
 
-    async fn prime_root(&mut self, event: IterEvent) -> IterEvent {
+    fn prime_root(&mut self, event: IterEvent) -> IterEvent {
         let request = Message::with_query(root(), RRType::NS);
-        let selector = self.host_selector.lock().unwrap().clone();
-        let result = send_query(&request, self.select_root_server(), selector).await;
-        let mut sub_event = IterEvent::new(
-            request,
-            QueryState::QueryResponse,
-            QueryState::PrimeResponse,
-        );
-        match result {
-            Ok(response) => {
-                sub_event.set_response(response, ResponseType::Unknown);
-            }
-            Err(e) => {
-                println!("prime query get error {}", e);
-            }
-        }
+        let mut sub_event =
+            IterEvent::new(request, QueryState::QueryTarget, QueryState::PrimeResponse);
+        sub_event.set_delegation_point(self.roothint.get_delegation_point());
         sub_event.set_base_event(event);
         sub_event
     }
 
-    fn select_root_server(&mut self) -> Host {
-        let dp = self.roothint.get_delegation_point();
-        let selector = self.host_selector.lock().unwrap();
-        dp.get_target(&*selector).unwrap()
-    }
-
     async fn process_query_target(&mut self, mut event: IterEvent) -> IterEvent {
+        if event.referral_count > MAX_REFERRAL_COUNT {
+            self.error_response(&mut event, Rcode::ServFail);
+            return event;
+        }
+
         let dp = event
-            .take_delegation_point()
+            .get_delegation_point()
             .expect("no dp set in query target state");
-        let selector = self.host_selector.lock().unwrap().clone();
-        let host = dp.get_target(&selector);
+        let host = self.select_host(dp);
         match host {
-            Some(host) => match send_query(event.get_request(), host, selector).await {
+            Some(host) => match self.client.send_query(event.get_request(), host).await {
                 Ok(response) => {
                     event.set_response(response, ResponseType::Unknown);
                     event.next_state(QueryState::QueryResponse);
@@ -167,55 +155,92 @@ impl<S: HostSelector + 'static + Send + Clone> Iterator<S> {
         event
     }
 
+    fn select_host(&mut self, dp: &DelegationPoint) -> Option<Host> {
+        let selector = self.host_selector.lock().unwrap();
+        dp.get_target(&*selector)
+    }
+
     fn process_query_response(&mut self, mut event: IterEvent) -> IterEvent {
-        match event.get_response() {
-            Some(mut response) => {
-                let question = event.get_request().question.as_ref().unwrap();
-                let query_type = question.typ;
-                match classify_response(&question.name, query_type, &response) {
-                    ResponseCategory::Answer
-                    | ResponseCategory::AnswerCName
-                    | ResponseCategory::NXDomain
-                    | ResponseCategory::NXRRset => {
-                        self.cache.lock().unwrap().add_response(response.clone());
-                        event.next_state(event.get_final_state());
-                    }
-                    ResponseCategory::Referral => {
-                        self.cache.lock().unwrap().add_response(response.clone());
-                        let zone = response.question.as_ref().unwrap().name.clone();
-                        let dp = DelegationPoint::new(
-                            zone,
-                            &response.section(SectionType::Authority).unwrap()[0],
-                            response.section(SectionType::Additional).unwrap(),
-                        );
-                        event.set_delegation_point(dp);
-                        event.next_state(QueryState::QueryTarget);
-                    }
-                    ResponseCategory::CName(next) => {
-                        self.cache.lock().unwrap().add_response(response.clone());
-                        event.set_prepend_rrsets(
-                            response.take_section(SectionType::Answer).unwrap(),
-                        );
-                        event.set_current_request(Message::with_query(next, query_type));
-                        event.next_state(QueryState::InitQuery);
-                    }
-                    _ => {
-                        event.next_state(QueryState::QueryTarget);
-                    }
-                }
+        let question = event.get_request().question.as_ref().unwrap();
+        let query_type = question.typ;
+        let response_category =
+            classify_response(&question.name, query_type, event.get_response().unwrap());
+        match response_category {
+            ResponseCategory::Answer
+            | ResponseCategory::AnswerCName
+            | ResponseCategory::NXDomain
+            | ResponseCategory::NXRRset => {
+                let response = event.get_response().unwrap();
+                self.cache.lock().unwrap().add_response(response.clone());
+                event.next_state(event.get_final_state());
             }
-            None => {
+            ResponseCategory::Referral => {
+                let response = event.take_response().unwrap();
+                let zone = response.question.as_ref().unwrap().name.clone();
+                let dp = DelegationPoint::new(
+                    zone,
+                    &response.section(SectionType::Authority).unwrap()[0],
+                    response.section(SectionType::Additional).unwrap(),
+                );
+                self.cache.lock().unwrap().add_response(response);
+                event.referral_count += 1;
+                event.set_delegation_point(dp);
+                event.next_state(QueryState::QueryTarget);
+            }
+            ResponseCategory::CName(next) => {
+                let response = event.take_response().unwrap();
+                event.set_prepend_rrsets(response.section(SectionType::Answer).unwrap().clone());
+                self.cache.lock().unwrap().add_response(response);
+                event.set_current_request(Message::with_query(next, query_type));
+                event.next_state(QueryState::InitQuery);
+                event.query_restart_count += 1;
+            }
+            _ => {
                 event.next_state(QueryState::QueryTarget);
             }
         }
         event
     }
 
-    fn process_prime_response(&mut self, event: IterEvent) -> IterEvent {
-        event
+    fn process_prime_response(&mut self, mut event: IterEvent) -> IterEvent {
+        let mut base_event = event
+            .take_base_event()
+            .expect("prime event should always has base event");
+        match event.take_response() {
+            Some(response) => {
+                let zone = response.question.as_ref().unwrap().name.clone();
+                let dp = DelegationPoint::new(
+                    zone,
+                    &response.section(SectionType::Answer).unwrap()[0],
+                    response.section(SectionType::Additional).unwrap(),
+                );
+                self.cache.lock().unwrap().add_response(response);
+                base_event.set_delegation_point(dp);
+                base_event.next_state(QueryState::QueryTarget);
+            }
+            None => {
+                self.error_response(&mut base_event, Rcode::ServFail);
+            }
+        }
+        base_event
     }
-    fn process_target_response(&mut self, event: IterEvent) -> IterEvent {
-        event
+
+    fn process_target_response(&mut self, mut event: IterEvent) -> IterEvent {
+        let mut base_event = event
+            .take_base_event()
+            .expect("prime event should always has base event");
+        let mut response = event
+            .take_response()
+            .expect("target query should get response");
+        let dp = base_event
+            .get_mut_delegation_point()
+            .expect("target query should has delegation point set");
+        dp.add_glue(&response.take_section(SectionType::Answer).unwrap()[0]);
+        base_event.next_state(QueryState::QueryTarget);
+        base_event
     }
-    fn process_finished(&mut self, event: &mut IterEvent) {}
+
+    fn process_finished(&mut self, mut event: IterEvent) -> Message {
+        event.generate_final_response()
+    }
 }

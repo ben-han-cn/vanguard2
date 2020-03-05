@@ -35,7 +35,7 @@ impl DelegationPoint {
 
     pub fn from_cache(zone: Name, cache: &mut MessageCache) -> Option<Self> {
         let closest_zone = cache.get_deepest_ns(&zone)?;
-        let ns = cache.get_rrset(&zone, RRType::NS)?;
+        let ns = cache.get_rrset(&closest_zone, RRType::NS)?;
         let glues = ns.rdatas.iter().fold(Vec::new(), |mut glues, rdata| {
             if let RData::NS(ref ns) = rdata {
                 if let Some(rrset) = cache.get_rrset(&ns.name, RRType::A) {

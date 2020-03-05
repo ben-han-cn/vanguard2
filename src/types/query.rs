@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 #[derive(Debug, Clone)]
 pub struct Query {
     client: SocketAddr,
-    request: Message,
+    pub request: Message,
 }
 
 impl Query {

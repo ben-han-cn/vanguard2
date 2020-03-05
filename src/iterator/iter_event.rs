@@ -1,9 +1,9 @@
 use super::delegation_point::DelegationPoint;
 use super::host_selector::Host;
 use crate::types::Query;
-use r53::{Message, RRset};
+use r53::{message::SectionType, HeaderFlag, Message, MessageBuilder, RRset, Rcode};
 
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum QueryState {
     InitQuery,
     QueryTarget,
@@ -65,8 +65,12 @@ impl IterEvent {
         self.delegation_point = Some(delegation_point);
     }
 
-    pub fn take_delegation_point(&mut self) -> Option<DelegationPoint> {
-        self.delegation_point.take()
+    pub fn get_delegation_point(&self) -> Option<&DelegationPoint> {
+        self.delegation_point.as_ref()
+    }
+
+    pub fn get_mut_delegation_point(&mut self) -> Option<&mut DelegationPoint> {
+        self.delegation_point.as_mut()
     }
 
     pub fn get_state(&self) -> QueryState {
@@ -113,12 +117,46 @@ impl IterEvent {
         self.response_type = Some(typ);
     }
 
-    pub fn get_response(&mut self) -> Option<Message> {
+    pub fn get_response(&self) -> Option<&Message> {
+        self.response.as_ref()
+    }
+
+    pub fn get_mut_response(&mut self) -> Option<&mut Message> {
+        self.response.as_mut()
+    }
+
+    pub fn take_response(&mut self) -> Option<Message> {
         self.response.take()
     }
 
     pub fn set_base_event(&mut self, e: IterEvent) {
         assert!(self.base_event.is_none());
         self.base_event = Some(Box::new(e));
+    }
+
+    pub fn take_base_event(&mut self) -> Option<IterEvent> {
+        self.base_event.take().map(|e| *e)
+    }
+
+    pub fn generate_final_response(mut self) -> Message {
+        let mut response = self.response.take().expect("should has response");
+        let mut builder = MessageBuilder::new(&mut self.orignal_request);
+        builder.make_response();
+        if response.header.rcode != Rcode::ServFail && !self.prepend_rrsets.is_empty() {
+            for rrset in self.prepend_rrsets {
+                builder.add_answer(rrset);
+            }
+        }
+
+        if let Some(answers) = response.take_section(SectionType::Answer) {
+            for rrset in answers {
+                builder.add_answer(rrset);
+            }
+        }
+        builder.rcode(response.header.rcode);
+        builder.set_flag(HeaderFlag::RecursionAvailable);
+        builder.clear_flag(HeaderFlag::AuthAnswer);
+        builder.done();
+        self.orignal_request
     }
 }
