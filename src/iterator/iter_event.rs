@@ -1,7 +1,11 @@
+use std::time::Instant;
+
 use super::delegation_point::DelegationPoint;
 use super::host_selector::Host;
 use crate::types::Query;
-use r53::{message::SectionType, HeaderFlag, Message, MessageBuilder, RRset, Rcode};
+use r53::{
+    message::Section, message::SectionType, HeaderFlag, Message, MessageBuilder, RRset, Rcode,
+};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum QueryState {
@@ -23,6 +27,7 @@ pub enum ResponseType {
 }
 
 pub struct IterEvent {
+    pub start_time: Instant,
     base_event: Option<Box<IterEvent>>,
 
     orignal_request: Message,
@@ -45,6 +50,7 @@ pub struct IterEvent {
 impl IterEvent {
     pub fn new(request: Message, init_state: QueryState, final_state: QueryState) -> Self {
         Self {
+            start_time: Instant::now(),
             base_event: None,
             orignal_request: request,
             current_request: None,
@@ -140,23 +146,19 @@ impl IterEvent {
 
     pub fn generate_final_response(mut self) -> Message {
         let mut response = self.response.take().expect("should has response");
-        let mut builder = MessageBuilder::new(&mut self.orignal_request);
-        builder.make_response();
         if response.header.rcode != Rcode::ServFail && !self.prepend_rrsets.is_empty() {
-            for rrset in self.prepend_rrsets {
-                builder.add_answer(rrset);
+            if let Some(answers) = response.section_mut(SectionType::Answer) {
+                self.prepend_rrsets.append(answers);
             }
+            response.sections[0] = Section(Some(self.prepend_rrsets));
         }
+        response.question = self.orignal_request.question.take();
 
-        if let Some(answers) = response.take_section(SectionType::Answer) {
-            for rrset in answers {
-                builder.add_answer(rrset);
-            }
-        }
-        builder.rcode(response.header.rcode);
+        let mut builder = MessageBuilder::new(&mut response);
         builder.set_flag(HeaderFlag::RecursionAvailable);
         builder.clear_flag(HeaderFlag::AuthAnswer);
+        builder.id(self.orignal_request.header.id);
         builder.done();
-        self.orignal_request
+        response
     }
 }

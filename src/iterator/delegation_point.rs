@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
 
-use r53::{Name, RData, RRType, RRset};
+use r53::{message::SectionType, Message, Name, RData, RRType, RRset};
 
 use super::host_selector::{Host, HostSelector};
 use crate::cache::MessageCache;
@@ -10,6 +10,7 @@ use crate::cache::MessageCache;
 pub struct DelegationPoint {
     zone: Name,
     server_and_hosts: HashMap<Name, Vec<Host>>,
+    probed_server: Vec<Name>,
 }
 
 impl DelegationPoint {
@@ -27,9 +28,26 @@ impl DelegationPoint {
         let mut dp = Self {
             zone,
             server_and_hosts,
+            probed_server: Vec::new(),
         };
 
         glues.iter().for_each(|glue| dp.add_glue(glue));
+        dp
+    }
+
+    pub fn from_referral_response(zone: Name, response: &Message) -> Self {
+        let mut dp = DelegationPoint::new(
+            zone,
+            &response
+                .section(SectionType::Authority)
+                .expect("referral response should has ns")[0],
+            &Vec::new(),
+        );
+        if let Some(glues) = response.section(SectionType::Additional) {
+            for glue in glues {
+                dp.add_glue(glue);
+            }
+        }
         dp
     }
 
@@ -80,14 +98,22 @@ impl DelegationPoint {
         }
     }
 
-    pub fn get_missing_server(&self) -> Vec<&Name> {
-        let mut missing_names = Vec::new();
+    pub fn get_missing_server(&self) -> Option<Name> {
         for (name, hosts) in self.server_and_hosts.iter() {
-            if hosts.len() == 0 {
-                missing_names.push(name);
+            if hosts.len() == 0
+                && !name.is_subdomain(&self.zone)
+                && self.probed_server.iter().position(|n| n == name).is_none()
+            {
+                return Some(name.clone());
             }
         }
-        missing_names
+        None
+    }
+
+    pub fn add_probed_server(&mut self, name: &Name) {
+        assert!(self.server_and_hosts.contains_key(name));
+
+        self.probed_server.push(name.clone());
     }
 }
 
@@ -116,7 +142,7 @@ mod tests {
         let glue2 = RRset::from_str("ns2.com. 3600  IN A 2.2.2.2").unwrap();
 
         let dp = DelegationPoint::new(zone, &ns, &vec![glue1, glue2]);
-        assert!(dp.get_missing_server().is_empty());
+        assert!(dp.get_missing_server().is_none());
     }
 
     #[test]
@@ -125,11 +151,22 @@ mod tests {
         let ns1 = RRset::from_str("com. 3600  IN NS ns1.com").unwrap();
         let ns2 = RRset::from_str("com. 3600  IN NS ns2.com").unwrap();
         let ns = merge_rrset(ns1, ns2);
-
         let glue1 = RRset::from_str("ns1.com. 3600  IN A 1.1.1.1").unwrap();
-
         let dp = DelegationPoint::new(zone, &ns, &vec![glue1]);
-        assert_eq!(dp.get_missing_server()[0], &Name::new("ns2.com.").unwrap());
+        assert!(dp.get_missing_server().is_none());
+
+        let zone = Name::new("com").unwrap();
+        let ns1 = RRset::from_str("com. 3600  IN NS ns1.com").unwrap();
+        let ns2 = RRset::from_str("com. 3600  IN NS ns2.cn").unwrap();
+        let ns = merge_rrset(ns1, ns2);
+        let glue1 = RRset::from_str("ns1.com. 3600  IN A 1.1.1.1").unwrap();
+        let mut dp = DelegationPoint::new(zone, &ns, &vec![glue1]);
+        assert_eq!(
+            dp.get_missing_server().unwrap(),
+            Name::new("ns2.cn.").unwrap()
+        );
+        dp.add_probed_server(&Name::new("ns2.cn.").unwrap());
+        assert!(dp.get_missing_server().is_none());
     }
 
     struct DumbSelector;

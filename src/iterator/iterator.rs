@@ -1,6 +1,7 @@
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use anyhow;
 use r53::{message::SectionType, name::root, Message, MessageBuilder, RRType, RRset, Rcode};
@@ -16,6 +17,7 @@ use crate::types::{classify_response, ResponseCategory};
 const MAX_CNAME_REDIRECT_COUNT: u8 = 8;
 const MAX_DEPENDENT_QUERY_COUNT: u8 = 4;
 const MAX_REFERRAL_COUNT: u8 = 30;
+const ITERATOR_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Clone)]
 pub struct Iterator {
@@ -131,16 +133,14 @@ impl Iterator {
                     event.next_state(QueryState::QueryResponse);
                 }
                 Err(e) => {
-                    println!("prime query get error {}", e);
+                    if event.start_time.elapsed() > ITERATOR_TIMEOUT {
+                        self.error_response(&mut event, Rcode::ServFail);
+                    }
                 }
             },
             None => {
                 let zone = dp.zone();
-                let missing_server = dp
-                    .get_missing_server()
-                    .iter()
-                    .find(|&n| !n.is_subdomain(zone))
-                    .map(|&n| n.clone());
+                let missing_server = dp.get_missing_server();
                 if let Some(name) = missing_server {
                     let query = Message::with_query(name, RRType::A);
                     let mut sub_event =
@@ -177,11 +177,7 @@ impl Iterator {
             ResponseCategory::Referral => {
                 let response = event.take_response().unwrap();
                 let zone = response.question.as_ref().unwrap().name.clone();
-                let dp = DelegationPoint::new(
-                    zone,
-                    &response.section(SectionType::Authority).unwrap()[0],
-                    response.section(SectionType::Additional).unwrap(),
-                );
+                let dp = DelegationPoint::from_referral_response(zone, &response);
                 self.cache.lock().unwrap().add_response(response);
                 event.referral_count += 1;
                 event.set_delegation_point(dp);
@@ -229,13 +225,23 @@ impl Iterator {
         let mut base_event = event
             .take_base_event()
             .expect("prime event should always has base event");
-        let mut response = event
-            .take_response()
-            .expect("target query should get response");
-        let dp = base_event
-            .get_mut_delegation_point()
-            .expect("target query should has delegation point set");
-        dp.add_glue(&response.take_section(SectionType::Answer).unwrap()[0]);
+
+        match event.take_response() {
+            Some(mut response) => {
+                println!("---> get target response {}", response);
+                let dp = base_event
+                    .get_mut_delegation_point()
+                    .expect("target query should has delegation point set");
+                dp.add_glue(&response.take_section(SectionType::Answer).unwrap()[0]);
+                base_event.next_state(QueryState::QueryTarget);
+            }
+            None => {
+                let dp = base_event
+                    .get_mut_delegation_point()
+                    .expect("target query should has delegation point set");
+                dp.add_probed_server(&event.get_original_request().question.as_ref().unwrap().name);
+            }
+        }
         base_event.next_state(QueryState::QueryTarget);
         base_event
     }
