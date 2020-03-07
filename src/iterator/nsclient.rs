@@ -5,7 +5,8 @@ use std::{
 };
 
 use anyhow::{self, bail};
-use r53::{Message, MessageRender};
+use r53::{Message, MessageRender, Rcode};
+use rand::random;
 use tokio::net::UdpSocket;
 use tokio::time::timeout;
 
@@ -26,7 +27,22 @@ impl NSClient {
         }
     }
 
-    pub async fn send_query(&mut self, request: &Message, target: Host) -> anyhow::Result<Message> {
+    pub async fn query(&mut self, request: &Message, target: Host) -> anyhow::Result<Message> {
+        let mut request = request.clone();
+        request.header.id = rand::random::<u16>();
+        let result = self.do_query(&request, target).await;
+        if let Ok(ref response) = result {
+            if response.header.rcode == Rcode::FormErr {
+                request.header.id = rand::random::<u16>();
+                request.edns = None;
+                request.recalculate_header();
+                return self.do_query(&request, target).await;
+            }
+        }
+        result
+    }
+
+    pub async fn do_query(&mut self, request: &Message, target: Host) -> anyhow::Result<Message> {
         let mut render = MessageRender::new();
         request.to_wire(&mut render);
         let mut socket = UdpSocket::bind(&("0.0.0.0:0".parse::<SocketAddr>().unwrap())).await?;
@@ -35,10 +51,7 @@ impl NSClient {
             .send_to(&render.take_data(), SocketAddr::new(target, 53))
             .await
         {
-            self.host_selector
-                .lock()
-                .unwrap()
-                .set_rtt(target, DEFAULT_RECV_TIMEOUT);
+            self.host_selector.lock().unwrap().set_timeout(target);
             bail!(e);
         }
 
@@ -53,18 +66,12 @@ impl NSClient {
                     return Message::from_wire(&buf[..size]);
                 }
                 Err(e) => {
-                    self.host_selector
-                        .lock()
-                        .unwrap()
-                        .set_rtt(target, DEFAULT_RECV_TIMEOUT);
+                    self.host_selector.lock().unwrap().set_timeout(target);
                     bail!(e);
                 }
             },
             Err(_) => {
-                self.host_selector
-                    .lock()
-                    .unwrap()
-                    .set_rtt(target, DEFAULT_RECV_TIMEOUT);
+                self.host_selector.lock().unwrap().set_timeout(target);
 
                 bail!("{} timeout", target.to_string());
             }

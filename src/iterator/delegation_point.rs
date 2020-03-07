@@ -94,7 +94,7 @@ impl DelegationPoint {
         if hosts.is_empty() {
             None
         } else {
-            Some(selector.select(&hosts))
+            selector.select(&hosts)
         }
     }
 

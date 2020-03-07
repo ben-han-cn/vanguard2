@@ -114,8 +114,8 @@ impl IterEvent {
         &self.orignal_request
     }
 
-    pub fn set_prepend_rrsets(&mut self, rrsets: Vec<RRset>) {
-        self.prepend_rrsets = rrsets
+    pub fn add_prepend_rrsets(&mut self, mut rrsets: Vec<RRset>) {
+        self.prepend_rrsets.append(&mut rrsets)
     }
 
     pub fn set_response(&mut self, response: Message, typ: ResponseType) {

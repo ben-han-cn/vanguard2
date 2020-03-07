@@ -127,7 +127,7 @@ impl Iterator {
             .expect("no dp set in query target state");
         let host = self.select_host(dp);
         match host {
-            Some(host) => match self.client.send_query(event.get_request(), host).await {
+            Some(host) => match self.client.query(event.get_request(), host).await {
                 Ok(response) => {
                     event.set_response(response, ResponseType::Unknown);
                     event.next_state(QueryState::QueryResponse);
@@ -185,7 +185,7 @@ impl Iterator {
             }
             ResponseCategory::CName(next) => {
                 let response = event.take_response().unwrap();
-                event.set_prepend_rrsets(response.section(SectionType::Answer).unwrap().clone());
+                event.add_prepend_rrsets(response.section(SectionType::Answer).unwrap().clone());
                 self.cache.lock().unwrap().add_response(response);
                 event.set_current_request(Message::with_query(next, query_type));
                 event.next_state(QueryState::InitQuery);
@@ -226,23 +226,23 @@ impl Iterator {
             .take_base_event()
             .expect("prime event should always has base event");
 
-        match event.take_response() {
-            Some(mut response) => {
-                println!("---> get target response {}", response);
-                let dp = base_event
-                    .get_mut_delegation_point()
-                    .expect("target query should has delegation point set");
-                dp.add_glue(&response.take_section(SectionType::Answer).unwrap()[0]);
-                base_event.next_state(QueryState::QueryTarget);
-            }
-            None => {
-                let dp = base_event
-                    .get_mut_delegation_point()
-                    .expect("target query should has delegation point set");
-                dp.add_probed_server(&event.get_original_request().question.as_ref().unwrap().name);
+        base_event.next_state(QueryState::QueryTarget);
+        let dp = base_event
+            .get_mut_delegation_point()
+            .expect("target query should has delegation point set");
+        if let Some(mut response) = event.take_response() {
+            if let Some(answers) = response.take_section(SectionType::Answer) {
+                if answers.len() == 1 {
+                    let answer = &answers[0];
+                    if answer.typ == RRType::A {
+                        dp.add_glue(answer);
+                        return base_event;
+                    }
+                }
             }
         }
-        base_event.next_state(QueryState::QueryTarget);
+
+        dp.add_probed_server(&event.get_original_request().question.as_ref().unwrap().name);
         base_event
     }
 

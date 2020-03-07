@@ -1,21 +1,92 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::{net::IpAddr, time::Duration};
+use std::ops::Add;
+use std::{
+    net::IpAddr,
+    time::{Duration, Instant},
+};
 
 use lru::LruCache;
 
 const SERVER_INIT_RTT: Duration = Duration::from_secs(0); //0 secs
+const TIMECOUNT_SERVER_SLEEP_TIME: Duration = Duration::from_secs(60); //1 minute
+const MAX_TIMEOUT_COUNT: u8 = 3;
 
 pub(crate) type Host = IpAddr;
 
 pub trait HostSelector {
     fn set_rtt(&mut self, host: Host, rtt: Duration);
-    //assume hosts isn't empty
-    fn select(&self, hosts: &[Host]) -> Host;
+    fn set_timeout(&mut self, host: Host);
+    fn select(&self, hosts: &[Host]) -> Option<Host>;
+}
+
+#[derive(Clone, Copy, Debug)]
+struct HostState {
+    rtt: Duration,
+    timeout_count: u8,
+    wakeup_time: Option<Instant>,
+}
+
+impl HostState {
+    pub fn new(rtt: Duration) -> Self {
+        Self {
+            rtt,
+            timeout_count: 0,
+            wakeup_time: None,
+        }
+    }
+
+    pub fn unreachable_host() -> Self {
+        Self {
+            rtt: Duration::from_secs(u64::max_value()),
+            timeout_count: 1,
+            wakeup_time: None,
+        }
+    }
+
+    pub fn set_rtt(&mut self, rtt: Duration) {
+        if self.timeout_count > 0 {
+            self.rtt = rtt;
+            self.timeout_count = 0;
+            self.wakeup_time = None;
+        } else {
+            self.rtt = self
+                .rtt
+                .checked_mul(3)
+                .unwrap()
+                .checked_add(rtt.checked_mul(7).unwrap())
+                .unwrap()
+                .checked_div(10)
+                .unwrap();
+        }
+    }
+
+    pub fn set_timout(&mut self) {
+        self.rtt = Duration::from_secs(u64::max_value());
+        if self.timeout_count < MAX_TIMEOUT_COUNT {
+            self.timeout_count += 1;
+        }
+
+        if self.timeout_count == MAX_TIMEOUT_COUNT {
+            self.wakeup_time = Some(Instant::now().add(TIMECOUNT_SERVER_SLEEP_TIME))
+        }
+    }
+
+    pub fn is_usable(&self) -> bool {
+        if let Some(wakeup_time) = self.wakeup_time {
+            return Instant::now() > wakeup_time;
+        } else {
+            true
+        }
+    }
+
+    pub fn get_rtt(&self) -> Duration {
+        self.rtt
+    }
 }
 
 pub struct RTTBasedHostSelector {
-    host_and_rtt: RefCell<LruCache<Host, Duration>>,
+    host_and_rtt: RefCell<LruCache<Host, HostState>>,
 }
 
 impl RTTBasedHostSelector {
@@ -26,11 +97,18 @@ impl RTTBasedHostSelector {
     }
 
     fn get_rtt(&self, host: &Host) -> Duration {
-        let mut inner = self.host_and_rtt.borrow_mut();
-        if let Some(rtt) = inner.get(host) {
-            *rtt
+        if let Some(state) = self.host_and_rtt.borrow_mut().get(host) {
+            state.get_rtt()
         } else {
             SERVER_INIT_RTT
+        }
+    }
+
+    fn is_host_usable(&self, host: &Host) -> bool {
+        if let Some(state) = self.host_and_rtt.borrow_mut().get(host) {
+            state.is_usable()
+        } else {
+            true
         }
     }
 }
@@ -38,34 +116,28 @@ impl RTTBasedHostSelector {
 impl HostSelector for RTTBasedHostSelector {
     fn set_rtt(&mut self, host: Host, rtt: Duration) {
         let mut inner = self.host_and_rtt.borrow_mut();
-        let rtt = match inner.get(&host) {
-            Some(old) => old
-                .checked_mul(3)
-                .unwrap()
-                .checked_add(rtt.checked_mul(7).unwrap())
-                .unwrap()
-                .checked_div(10)
-                .unwrap(),
-            None => rtt,
-        };
-        inner.put(host, rtt);
+        if let Some(state) = inner.get_mut(&host) {
+            state.set_rtt(rtt)
+        } else {
+            inner.put(host, HostState::new(rtt));
+        }
     }
 
-    fn select(&self, hosts: &[Host]) -> Host {
-        assert!(!hosts.is_empty());
+    fn set_timeout(&mut self, host: Host) {
+        let mut inner = self.host_and_rtt.borrow_mut();
+        if let Some(state) = inner.get_mut(&host) {
+            state.set_timout()
+        } else {
+            inner.put(host, HostState::unreachable_host());
+        }
+    }
 
-        let (_, index) = hosts.iter().enumerate().fold(
-            (Duration::from_secs(u64::max_value()), 0),
-            |(mut rtt, mut index): (Duration, usize), (i, host)| {
-                let rtt_ = self.get_rtt(host);
-                if rtt_ < rtt {
-                    rtt = rtt_;
-                    index = i;
-                }
-                (rtt, index)
-            },
-        );
-        hosts[index]
+    fn select(&self, hosts: &[Host]) -> Option<Host> {
+        hosts
+            .iter()
+            .filter(|h| self.is_host_usable(h))
+            .min_by(|h1, h2| self.get_rtt(h1).cmp(&self.get_rtt(h2)))
+            .map(|h| *h)
     }
 }
 
