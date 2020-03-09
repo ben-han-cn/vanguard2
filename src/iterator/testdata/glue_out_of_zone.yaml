@@ -1,0 +1,68 @@
+qname: knet.cn
+qtype: A
+servers:
+- ip: 1.1.1.1
+  zone: .
+  qname: knet.cn
+  qtype: A
+  response:
+    authority:
+    - "cn. 3600 IN NS a.cn."
+    additional:
+    - "a.cn. 3600 IN A 2.2.2.2"
+
+- ip: 1.1.1.1
+  zone: .
+  qname: vns1.zdnscloud.biz.
+  qtype: A
+  response:
+    authority:
+    - "biz. 3600 IN NS k.gtld.biz"
+    additional:
+    - "k.gtld.biz. 3600 IN A 4.4.4.4"
+
+- ip: 2.2.2.2
+  zone: cn
+  qname: knet.cn
+  qtype: A
+  response:
+    authority:
+    - "knet.cn. 3600 IN NS vns1.zdnscloud.biz."
+
+- ip: 4.4.4.4
+  zone: biz.
+  qname: vns1.zdnscloud.biz.
+  qtype: A
+  response:
+    authority:
+    - "zdnscloud.biz. 7200 IN NS vns1.zdnscloud.biz."
+    - "zdnscloud.biz. 7200 IN NS cns1.zdnscloud.net."
+    additional:
+    - "vns1.zdnscloud.biz. 3600 IN A 5.5.5.5"
+
+- ip: 5.5.5.5
+  zone: zdnscloud.biz.
+  qname: vns1.zdnscloud.biz.
+  qtype: A
+  response:
+    answer:
+    - "vns1.zdnscloud.biz. 3600 IN A 5.5.5.5"
+    authority:
+    - "zdnscloud.biz. 7200 IN NS vns1.zdnscloud.biz."
+    - "zdnscloud.biz. 7200 IN NS cns1.zdnscloud.net."
+
+- ip: 5.5.5.5
+  zone: knet.cn
+  qname: knet.cn
+  qtype: A
+  response:
+    answer:
+    - "knet.cn 3600 IN A 6.6.6.6"
+    authority:
+    - "knet.cn. 3600 IN NS vns1.zdnscloud.biz."
+
+response:
+  answer:
+  - "knet.cn 3600 IN A 6.6.6.6"
+  authority:
+  - "knet.cn. 3600 IN NS vns1.zdnscloud.biz."

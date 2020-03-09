@@ -25,6 +25,7 @@ hyper = "0.13"
 prometheus = "0.7"
 lazy_static = "1.4.0"
 rand = "0.7"
+async-trait = "0.1.24"
 
 [[bin]]
 name = "vanguard2"

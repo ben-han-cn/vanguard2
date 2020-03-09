@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use crate::auth::{AuthServer, AuthZone};
 use crate::cache::MessageCache;
 use crate::config::VanguardConfig;
-use crate::iterator::Iterator;
+use crate::iterator::{Iterator, NewIterator};
 use crate::recursor::Recursor;
 use crate::types::{Query, QueryHandler};
 use anyhow::{self, bail};
@@ -24,10 +24,9 @@ impl Resolver {
     pub fn new(config: &VanguardConfig) -> Self {
         let auth_server = AuthServer::new(&config.auth);
         let cache = Arc::new(Mutex::new(MessageCache::new(DEFAULT_MESSAGE_CACHE_SIZE)));
-        let iterator = Iterator::new(cache);
         Resolver {
             auth_server,
-            iterator,
+            iterator: NewIterator(cache),
         }
     }
 

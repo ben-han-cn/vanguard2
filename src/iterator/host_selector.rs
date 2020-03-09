@@ -16,7 +16,7 @@ pub(crate) type Host = IpAddr;
 
 pub trait HostSelector {
     fn set_rtt(&mut self, host: Host, rtt: Duration);
-    fn set_timeout(&mut self, host: Host);
+    fn set_timeout(&mut self, host: Host, timeout: Duration);
     fn select(&self, hosts: &[Host]) -> Option<Host>;
 }
 
@@ -36,9 +36,9 @@ impl HostState {
         }
     }
 
-    pub fn unreachable_host() -> Self {
+    pub fn timeout(timeout: Duration) -> Self {
         Self {
-            rtt: Duration::from_secs(u64::max_value()),
+            rtt: timeout,
             timeout_count: 1,
             wakeup_time: None,
         }
@@ -46,30 +46,31 @@ impl HostState {
 
     pub fn set_rtt(&mut self, rtt: Duration) {
         if self.timeout_count > 0 {
-            self.rtt = rtt;
             self.timeout_count = 0;
             self.wakeup_time = None;
-        } else {
-            self.rtt = self
-                .rtt
-                .checked_mul(3)
-                .unwrap()
-                .checked_add(rtt.checked_mul(7).unwrap())
-                .unwrap()
-                .checked_div(10)
-                .unwrap();
         }
+
+        self.rtt = Self::calculate_rtt(self.rtt, rtt);
     }
 
-    pub fn set_timout(&mut self) {
-        self.rtt = Duration::from_secs(u64::max_value());
+    pub fn set_timout(&mut self, timeout: Duration) {
         if self.timeout_count < MAX_TIMEOUT_COUNT {
             self.timeout_count += 1;
+            self.rtt = Self::calculate_rtt(self.rtt, timeout);
         }
 
         if self.timeout_count == MAX_TIMEOUT_COUNT {
             self.wakeup_time = Some(Instant::now().add(TIMECOUNT_SERVER_SLEEP_TIME))
         }
+    }
+
+    fn calculate_rtt(last: Duration, now: Duration) -> Duration {
+        last.checked_mul(3)
+            .unwrap()
+            .checked_add(now.checked_mul(7).unwrap())
+            .unwrap()
+            .checked_div(10)
+            .unwrap()
     }
 
     pub fn is_usable(&self) -> bool {
@@ -123,12 +124,12 @@ impl HostSelector for RTTBasedHostSelector {
         }
     }
 
-    fn set_timeout(&mut self, host: Host) {
+    fn set_timeout(&mut self, host: Host, timeout: Duration) {
         let mut inner = self.host_and_rtt.borrow_mut();
         if let Some(state) = inner.get_mut(&host) {
-            state.set_timout()
+            state.set_timout(timeout)
         } else {
-            inner.put(host, HostState::unreachable_host());
+            inner.put(host, HostState::timeout(timeout));
         }
     }
 
@@ -156,8 +157,8 @@ mod tests {
         let host2 = IpAddr::V4(Ipv4Addr::new(2, 2, 2, 2));
         selector.set_rtt(host1, Duration::from_secs(10));
         selector.set_rtt(host2, Duration::from_secs(11));
-        assert_eq!(selector.select(vec![host1, host2].as_ref()), host1);
+        assert_eq!(selector.select(vec![host1, host2].as_ref()).unwrap(), host1);
         selector.set_rtt(host1, Duration::from_secs(12));
-        assert_eq!(selector.select(vec![host1, host2].as_ref()), host2);
+        assert_eq!(selector.select(vec![host1, host2].as_ref()).unwrap(), host2);
     }
 }

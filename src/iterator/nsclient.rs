@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::{self, bail};
+use async_trait::async_trait;
 use r53::{Message, MessageRender, Rcode};
 use rand::random;
 use tokio::net::UdpSocket;
@@ -14,6 +15,11 @@ use super::host_selector::{Host, HostSelector, RTTBasedHostSelector};
 
 const DEFAULT_RECV_TIMEOUT: Duration = Duration::from_secs(3); //3 secs
 const DEFAULT_RECV_BUF_SIZE: usize = 1024;
+
+#[async_trait]
+pub trait NameServerClient: Clone + Sync + Send {
+    async fn query(&self, request: &Message, target: Host) -> anyhow::Result<Message>;
+}
 
 #[derive(Clone)]
 pub struct NSClient {
@@ -27,22 +33,7 @@ impl NSClient {
         }
     }
 
-    pub async fn query(&mut self, request: &Message, target: Host) -> anyhow::Result<Message> {
-        let mut request = request.clone();
-        request.header.id = rand::random::<u16>();
-        let result = self.do_query(&request, target).await;
-        if let Ok(ref response) = result {
-            if response.header.rcode == Rcode::FormErr {
-                request.header.id = rand::random::<u16>();
-                request.edns = None;
-                request.recalculate_header();
-                return self.do_query(&request, target).await;
-            }
-        }
-        result
-    }
-
-    pub async fn do_query(&mut self, request: &Message, target: Host) -> anyhow::Result<Message> {
+    pub async fn do_query(&self, request: &Message, target: Host) -> anyhow::Result<Message> {
         let mut render = MessageRender::new();
         request.to_wire(&mut render);
         let mut socket = UdpSocket::bind(&("0.0.0.0:0".parse::<SocketAddr>().unwrap())).await?;
@@ -51,7 +42,10 @@ impl NSClient {
             .send_to(&render.take_data(), SocketAddr::new(target, 53))
             .await
         {
-            self.host_selector.lock().unwrap().set_timeout(target);
+            self.host_selector
+                .lock()
+                .unwrap()
+                .set_timeout(target, DEFAULT_RECV_TIMEOUT);
             bail!(e);
         }
 
@@ -66,15 +60,39 @@ impl NSClient {
                     return Message::from_wire(&buf[..size]);
                 }
                 Err(e) => {
-                    self.host_selector.lock().unwrap().set_timeout(target);
+                    self.host_selector
+                        .lock()
+                        .unwrap()
+                        .set_timeout(target, DEFAULT_RECV_TIMEOUT);
                     bail!(e);
                 }
             },
             Err(_) => {
-                self.host_selector.lock().unwrap().set_timeout(target);
+                self.host_selector
+                    .lock()
+                    .unwrap()
+                    .set_timeout(target, DEFAULT_RECV_TIMEOUT);
 
                 bail!("{} timeout", target.to_string());
             }
         }
+    }
+}
+
+#[async_trait]
+impl NameServerClient for NSClient {
+    async fn query(&self, request: &Message, target: Host) -> anyhow::Result<Message> {
+        let mut request = request.clone();
+        request.header.id = rand::random::<u16>();
+        let result = self.do_query(&request, target).await;
+        if let Ok(ref response) = result {
+            if response.header.rcode == Rcode::FormErr {
+                request.header.id = rand::random::<u16>();
+                request.edns = None;
+                request.recalculate_header();
+                return self.do_query(&request, target).await;
+            }
+        }
+        result
     }
 }

@@ -9,7 +9,7 @@ use r53::{message::SectionType, name::root, Message, MessageBuilder, RRType, RRs
 use super::delegation_point::DelegationPoint;
 use super::host_selector::{Host, HostSelector, RTTBasedHostSelector};
 use super::iter_event::{IterEvent, QueryState, ResponseType};
-use super::nsclient::NSClient;
+use super::nsclient::{NSClient, NameServerClient};
 use super::roothint::RootHint;
 use crate::cache::MessageCache;
 use crate::types::{classify_response, ResponseCategory};
@@ -19,22 +19,31 @@ const MAX_DEPENDENT_QUERY_COUNT: u8 = 4;
 const MAX_REFERRAL_COUNT: u8 = 30;
 const ITERATOR_TIMEOUT: Duration = Duration::from_secs(10);
 
+pub fn NewIterator(cache: Arc<Mutex<MessageCache>>) -> Iterator<NSClient> {
+    let host_selector = Arc::new(Mutex::new(RTTBasedHostSelector::new(10000)));
+    let client = NSClient::new(host_selector.clone());
+    Iterator::new(cache, client, host_selector)
+}
+
 #[derive(Clone)]
-pub struct Iterator {
+pub struct Iterator<C = NSClient> {
     cache: Arc<Mutex<MessageCache>>,
     roothint: Arc<RootHint>,
     host_selector: Arc<Mutex<RTTBasedHostSelector>>,
-    client: NSClient,
+    client: C,
 }
 
-impl Iterator {
-    pub fn new(cache: Arc<Mutex<MessageCache>>) -> Self {
-        let host_selector = Arc::new(Mutex::new(RTTBasedHostSelector::new(10000)));
+impl<C: NameServerClient + 'static> Iterator<C> {
+    pub fn new(
+        cache: Arc<Mutex<MessageCache>>,
+        client: C,
+        host_selector: Arc<Mutex<RTTBasedHostSelector>>,
+    ) -> Self {
         Self {
             cache: cache.clone(),
             roothint: Arc::new(RootHint::new()),
-            host_selector: host_selector.clone(),
-            client: NSClient::new(host_selector),
+            host_selector,
+            client,
         }
     }
 
