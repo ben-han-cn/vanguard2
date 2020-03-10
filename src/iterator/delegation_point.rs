@@ -14,7 +14,31 @@ pub struct DelegationPoint {
 }
 
 impl DelegationPoint {
-    pub fn new(zone: Name, ns: &RRset, glues: &Vec<RRset>) -> Self {
+    pub fn new(zone: Name, server_and_hosts: HashMap<Name, Vec<Host>>) -> Self {
+        Self {
+            zone,
+            server_and_hosts,
+            probed_server: Vec::new(),
+        }
+    }
+
+    pub fn from_referral_response(zone: Name, response: &Message) -> Self {
+        let mut dp = DelegationPoint::from_ns_rrset(
+            zone,
+            &response
+                .section(SectionType::Authority)
+                .expect("referral response should has ns")[0],
+            &Vec::new(),
+        );
+        if let Some(glues) = response.section(SectionType::Additional) {
+            for glue in glues {
+                dp.add_glue(glue);
+            }
+        }
+        dp
+    }
+
+    pub fn from_ns_rrset(zone: Name, ns: &RRset, glues: &Vec<RRset>) -> Self {
         let mut server_and_hosts = ns.rdatas.iter().fold(
             HashMap::new(),
             |mut servers: HashMap<Name, Vec<Host>>, rdata| {
@@ -35,24 +59,8 @@ impl DelegationPoint {
         dp
     }
 
-    pub fn from_referral_response(zone: Name, response: &Message) -> Self {
-        let mut dp = DelegationPoint::new(
-            zone,
-            &response
-                .section(SectionType::Authority)
-                .expect("referral response should has ns")[0],
-            &Vec::new(),
-        );
-        if let Some(glues) = response.section(SectionType::Additional) {
-            for glue in glues {
-                dp.add_glue(glue);
-            }
-        }
-        dp
-    }
-
-    pub fn from_cache(zone: Name, cache: &mut MessageCache) -> Option<Self> {
-        let closest_zone = cache.get_deepest_ns(&zone)?;
+    pub fn from_cache(zone: &Name, cache: &mut MessageCache) -> Option<Self> {
+        let closest_zone = cache.get_deepest_ns(zone)?;
         let ns = cache.get_rrset(&closest_zone, RRType::NS)?;
         let glues = ns.rdatas.iter().fold(Vec::new(), |mut glues, rdata| {
             if let RData::NS(ref ns) = rdata {
@@ -62,7 +70,7 @@ impl DelegationPoint {
             }
             glues
         });
-        Some(DelegationPoint::new(zone, &ns, &glues))
+        Some(DelegationPoint::from_ns_rrset(zone.clone(), &ns, &glues))
     }
 
     pub fn zone(&self) -> &Name {
@@ -141,7 +149,7 @@ mod tests {
         let glue1 = RRset::from_str("ns1.com. 3600  IN A 1.1.1.1").unwrap();
         let glue2 = RRset::from_str("ns2.com. 3600  IN A 2.2.2.2").unwrap();
 
-        let dp = DelegationPoint::new(zone, &ns, &vec![glue1, glue2]);
+        let dp = DelegationPoint::from_ns_rrset(zone, &ns, &vec![glue1, glue2]);
         assert!(dp.get_missing_server().is_none());
     }
 
@@ -152,7 +160,7 @@ mod tests {
         let ns2 = RRset::from_str("com. 3600  IN NS ns2.com").unwrap();
         let ns = merge_rrset(ns1, ns2);
         let glue1 = RRset::from_str("ns1.com. 3600  IN A 1.1.1.1").unwrap();
-        let dp = DelegationPoint::new(zone, &ns, &vec![glue1]);
+        let dp = DelegationPoint::from_ns_rrset(zone, &ns, &vec![glue1]);
         assert!(dp.get_missing_server().is_none());
 
         let zone = Name::new("com").unwrap();
@@ -160,7 +168,7 @@ mod tests {
         let ns2 = RRset::from_str("com. 3600  IN NS ns2.cn").unwrap();
         let ns = merge_rrset(ns1, ns2);
         let glue1 = RRset::from_str("ns1.com. 3600  IN A 1.1.1.1").unwrap();
-        let mut dp = DelegationPoint::new(zone, &ns, &vec![glue1]);
+        let mut dp = DelegationPoint::from_ns_rrset(zone, &ns, &vec![glue1]);
         assert_eq!(
             dp.get_missing_server().unwrap(),
             Name::new("ns2.cn.").unwrap()
@@ -189,12 +197,12 @@ mod tests {
         let glue3 = RRset::from_str("ns1.com. 3600  IN A 3.3.3.3").unwrap();
         let glue = merge_rrset(merge_rrset(glue1, glue2), glue3);
 
-        let dp = DelegationPoint::new(zone, &ns, &vec![glue]);
+        let dp = DelegationPoint::from_ns_rrset(zone, &ns, &vec![glue]);
         let host = dp.get_target(&DumbSelector).unwrap();
         assert_eq!(host.to_string(), "2.2.2.2");
 
         let zone = Name::new("com").unwrap();
-        let mut dp = DelegationPoint::new(zone, &ns, &Vec::new());
+        let mut dp = DelegationPoint::from_ns_rrset(zone, &ns, &Vec::new());
         let host = dp.get_target(&DumbSelector);
         assert!(host.is_none());
         let glue = RRset::from_str("ns2.com. 3600  IN A 1.1.1.1").unwrap();

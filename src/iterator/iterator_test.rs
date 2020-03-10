@@ -7,10 +7,12 @@ use std::{
     time::{Duration, Instant},
 };
 
+use super::forwarder::ForwarderManager;
 use super::host_selector::{Host, HostSelector, RTTBasedHostSelector};
 use super::iterator::Iterator;
 use super::nsclient::NameServerClient;
 use crate::cache::MessageCache;
+use crate::config::{VanguardConfig, ZoneForwarderConfig};
 use anyhow::{self, bail};
 use async_trait::async_trait;
 use r53::{message::SectionType, name::root, Message, MessageBuilder, Name, RRType, RRset, Rcode};
@@ -179,7 +181,7 @@ impl Response {
     }
 }
 
-fn run_testcase(case: TestCase) {
+fn run_testcase(conf: &VanguardConfig, case: TestCase) {
     let host_selector = Arc::new(Mutex::new(RTTBasedHostSelector::new(10000)));
     let mut client = DumbClient::new(host_selector.clone());
     let mut cache = MessageCache::new(100000);
@@ -203,7 +205,13 @@ fn run_testcase(case: TestCase) {
         );
     }
 
-    let mut iterator = Iterator::new(Arc::new(Mutex::new(cache)), client, host_selector);
+    let forwarder = Arc::new(ForwarderManager::new(&conf.forwarder));
+    let mut iterator = Iterator::new(
+        Arc::new(Mutex::new(cache)),
+        host_selector,
+        forwarder,
+        client,
+    );
     let mut rt = Runtime::new().unwrap();
 
     let qname = Name::new(case.qname.as_ref()).unwrap();
@@ -216,19 +224,36 @@ fn run_testcase(case: TestCase) {
 }
 
 #[test]
-fn test_ns_in_zone() {
+fn test_iterator() {
+    let conf: VanguardConfig = Default::default();
     let mut testdir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     testdir.push("src/iterator/testdata");
-    for entry in read_dir(testdir.as_path()).unwrap() {
-        let testfile_path = entry.unwrap().path();
-        if let Some(extension) = testfile_path.extension() {
-            if extension == "yaml" {
-                let mut file = File::open(testfile_path).unwrap();
-                let mut content = String::new();
-                file.read_to_string(&mut content).unwrap();
-                let case: TestCase = serde_yaml::from_str(&content).expect("unmarshal failed");
-                run_testcase(case);
-            }
-        }
+    for f in vec![
+        "cname_chain.yaml",
+        "glue_all_in_zone.yaml",
+        "some_nameserver_offline.yaml",
+        "glue_out_of_zone.yaml",
+    ] {
+        let mut testfile_path = testdir.clone();
+        testfile_path.push(f);
+        let mut file = File::open(testfile_path.as_path()).unwrap();
+        let mut content = String::new();
+        file.read_to_string(&mut content).unwrap();
+        let case: TestCase = serde_yaml::from_str(&content).expect("unmarshal failed");
+        run_testcase(&conf, case);
     }
+
+    //test forwarder
+    let mut conf: VanguardConfig = Default::default();
+    conf.forwarder.forwarders.push(ZoneForwarderConfig {
+        zone_name: "cn.".to_string(),
+        addresses: vec!["44.44.44.44".to_string()],
+    });
+    let mut testfile_path = testdir.clone();
+    testfile_path.push("forward.yaml");
+    let mut file = File::open(testfile_path.as_path()).unwrap();
+    let mut content = String::new();
+    file.read_to_string(&mut content).unwrap();
+    let case: TestCase = serde_yaml::from_str(&content).expect("unmarshal failed");
+    run_testcase(&conf, case);
 }

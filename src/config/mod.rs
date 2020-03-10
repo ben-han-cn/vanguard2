@@ -2,7 +2,7 @@ use anyhow;
 use serde::{Deserialize, Serialize};
 use std::{fs::File, io::prelude::*, path::Path};
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Default, Debug, Deserialize, Serialize)]
 pub struct VanguardConfig {
     #[serde(default)]
     pub server: ServerConfig,

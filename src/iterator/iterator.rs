@@ -7,22 +7,27 @@ use anyhow;
 use r53::{message::SectionType, name::root, Message, MessageBuilder, RRType, RRset, Rcode};
 
 use super::delegation_point::DelegationPoint;
+use super::forwarder::ForwarderManager;
 use super::host_selector::{Host, HostSelector, RTTBasedHostSelector};
 use super::iter_event::{IterEvent, QueryState, ResponseType};
 use super::nsclient::{NSClient, NameServerClient};
 use super::roothint::RootHint;
 use crate::cache::MessageCache;
+use crate::config::VanguardConfig;
 use crate::types::{classify_response, ResponseCategory};
 
 const MAX_CNAME_REDIRECT_COUNT: u8 = 8;
 const MAX_DEPENDENT_QUERY_COUNT: u8 = 4;
 const MAX_REFERRAL_COUNT: u8 = 30;
 const ITERATOR_TIMEOUT: Duration = Duration::from_secs(10);
+const DEFAULT_MESSAGE_CACHE_SIZE: usize = 10240;
 
-pub fn NewIterator(cache: Arc<Mutex<MessageCache>>) -> Iterator<NSClient> {
+pub fn NewIterator(conf: &VanguardConfig) -> Iterator<NSClient> {
     let host_selector = Arc::new(Mutex::new(RTTBasedHostSelector::new(10000)));
+    let cache = Arc::new(Mutex::new(MessageCache::new(DEFAULT_MESSAGE_CACHE_SIZE)));
     let client = NSClient::new(host_selector.clone());
-    Iterator::new(cache, client, host_selector)
+    let forwarder = Arc::new(ForwarderManager::new(&conf.forwarder));
+    Iterator::new(cache, host_selector, forwarder, client)
 }
 
 #[derive(Clone)]
@@ -30,19 +35,22 @@ pub struct Iterator<C = NSClient> {
     cache: Arc<Mutex<MessageCache>>,
     roothint: Arc<RootHint>,
     host_selector: Arc<Mutex<RTTBasedHostSelector>>,
+    forwarder: Arc<ForwarderManager>,
     client: C,
 }
 
 impl<C: NameServerClient + 'static> Iterator<C> {
     pub fn new(
         cache: Arc<Mutex<MessageCache>>,
-        client: C,
         host_selector: Arc<Mutex<RTTBasedHostSelector>>,
+        forwarder: Arc<ForwarderManager>,
+        client: C,
     ) -> Self {
         Self {
             cache: cache.clone(),
             roothint: Arc::new(RootHint::new()),
             host_selector,
+            forwarder,
             client,
         }
     }
@@ -83,9 +91,13 @@ impl<C: NameServerClient + 'static> Iterator<C> {
 
         if self.lookup_cache(&mut event) {
             return event;
-        } else {
-            return self.prime_root(event);
         }
+
+        if self.find_delegation_point(&mut event) {
+            return event;
+        }
+
+        return self.prime_root(event);
     }
 
     fn error_response(&mut self, event: &mut IterEvent, rcode: Rcode) {
@@ -103,16 +115,23 @@ impl<C: NameServerClient + 'static> Iterator<C> {
         if let Some(response) = cache.gen_response(&event.get_request()) {
             event.set_response(response, ResponseType::Answer);
             event.next_state(event.get_final_state());
-            return true;
-        } else if let Some(dp) = DelegationPoint::from_cache(
-            event.get_request().question.as_ref().unwrap().name.clone(),
-            &mut cache,
-        ) {
+            true
+        } else {
+            false
+        }
+    }
+
+    fn find_delegation_point(&mut self, event: &mut IterEvent) -> bool {
+        let qname = &event.get_request().question.as_ref().unwrap().name;
+        if let Some(dp) = self.forwarder.get_delegation_point(qname).or_else(|| {
+            let mut cache = self.cache.lock().unwrap();
+            DelegationPoint::from_cache(qname, &mut cache)
+        }) {
             event.set_delegation_point(dp);
             event.next_state(QueryState::QueryTarget);
-            return true;
+            true
         } else {
-            return false;
+            false
         }
     }
 
@@ -214,7 +233,7 @@ impl<C: NameServerClient + 'static> Iterator<C> {
         match event.take_response() {
             Some(response) => {
                 let zone = response.question.as_ref().unwrap().name.clone();
-                let dp = DelegationPoint::new(
+                let dp = DelegationPoint::from_ns_rrset(
                     zone,
                     &response.section(SectionType::Answer).unwrap()[0],
                     response.section(SectionType::Additional).unwrap(),

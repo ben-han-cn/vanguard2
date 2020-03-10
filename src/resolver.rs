@@ -4,10 +4,8 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex, RwLock};
 
 use crate::auth::{AuthServer, AuthZone};
-use crate::cache::MessageCache;
 use crate::config::VanguardConfig;
 use crate::iterator::{Iterator, NewIterator};
-use crate::recursor::Recursor;
 use crate::types::{Query, QueryHandler};
 use anyhow::{self, bail};
 use r53::Message;
@@ -23,10 +21,9 @@ pub struct Resolver {
 impl Resolver {
     pub fn new(config: &VanguardConfig) -> Self {
         let auth_server = AuthServer::new(&config.auth);
-        let cache = Arc::new(Mutex::new(MessageCache::new(DEFAULT_MESSAGE_CACHE_SIZE)));
         Resolver {
             auth_server,
-            iterator: NewIterator(cache),
+            iterator: NewIterator(config),
         }
     }
 

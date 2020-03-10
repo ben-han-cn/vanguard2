@@ -11,7 +11,6 @@ mod forwarder;
 mod iterator;
 pub mod metrics;
 mod nameserver;
-mod recursor;
 pub mod resolver;
 pub mod server;
 mod types;
