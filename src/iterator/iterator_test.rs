@@ -183,6 +183,7 @@ fn run_testcase(case: TestCase) {
     let host_selector = Arc::new(Mutex::new(RTTBasedHostSelector::new(10000)));
     let mut client = DumbClient::new(host_selector.clone());
     let mut cache = MessageCache::new(100000);
+    //as a replacement for root hint
     cache.add_response(gen_response(
         root(),
         RRType::NS,

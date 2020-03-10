@@ -1,0 +1,47 @@
+qname: cnnic.cn
+qtype: A
+servers:
+- ip: 1.1.1.1
+  zone: .
+  qname: cnnic.cn
+  qtype: A
+  response:
+    authority:
+    - "cn. 3600 IN NS a.dns.cn."
+    - "cn. 3600 IN NS b.dns.cn."
+    additional:
+    - "a.dns.cn 3600 IN A 2.2.2.2"
+    - "b.dns.cn 3600 IN A 3.3.3.3"
+
+- ip: 3.3.3.3
+  zone: cn
+  qname: cnnic.cn
+  qtype: A
+  response:
+    authority:
+    - "cnnic.cn. 3600 IN NS b.cnnic.cn."
+    additional:
+    - "b.cnnic.cn. 3600 IN A 4.4.4.4"
+    - "b.cnnic.cn. 3600 IN A 5.5.5.5"
+
+- ip: 4.4.4.4
+  zone: cnnic.cn
+  qname: cnnic.cn
+  qtype: A
+  response:
+    answer:
+    - "cnnic.cn 3600 IN A 7.7.7.7"
+    authority:
+    - "cnnic.cn 3600 IN NS b.cnnic.cn."
+    additional:
+    - "b.cnnic.cn. 3600 IN A 4.4.4.4"
+    - "b.cnnic.cn. 3600 IN A 5.5.5.5"
+
+response:
+  answer:
+  - "cnnic.cn 3600 IN A 7.7.7.7"
+  authority:
+  - "cnnic.cn 3600 IN NS b.cnnic.cn."
+  additional:
+  - "b.cnnic.cn 3600 IN A 4.4.4.4"
+  - "b.cnnic.cn 3600 IN A 5.5.5.5"
