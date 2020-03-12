@@ -1,5 +1,6 @@
 use vanguard2::config::VanguardConfig;
 use vanguard2::controller::Controller;
+use vanguard2::logger;
 use vanguard2::metrics::run_metric_server;
 use vanguard2::resolver::Resolver;
 use vanguard2::server::Server;
@@ -17,6 +18,9 @@ fn main() {
                 .takes_value(true),
         )
         .get_matches();
+
+    //when guard is dropped, logger will be cleaned
+    let _guard = logger::init_logger();
 
     let config_file = matches.value_of("config").unwrap_or("vanguard.conf");
     let config = VanguardConfig::load_config(config_file).expect("config load failed");

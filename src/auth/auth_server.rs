@@ -1,10 +1,7 @@
 use super::zones::AuthZone;
 use crate::{config::AuthorityConfig, types::Query};
 use r53::{Message, Name};
-use std::error::Error;
 use std::fs;
-use std::net::SocketAddr;
-use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 
 #[derive(Clone)]

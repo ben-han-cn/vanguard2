@@ -7,7 +7,6 @@ use std::{
 use anyhow::{self, bail};
 use async_trait::async_trait;
 use r53::{Message, MessageRender, Rcode};
-use rand::random;
 use tokio::net::UdpSocket;
 use tokio::time::timeout;
 
@@ -67,13 +66,12 @@ impl NSClient {
                     bail!(e);
                 }
             },
-            Err(_) => {
+            Err(e) => {
                 self.host_selector
                     .lock()
                     .unwrap()
                     .set_timeout(target, DEFAULT_RECV_TIMEOUT);
-
-                bail!("{} timeout", target.to_string());
+                bail!(e);
             }
         }
     }

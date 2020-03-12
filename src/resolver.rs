@@ -1,16 +1,13 @@
-use std::error::Error;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 
 use crate::auth::{AuthServer, AuthZone};
 use crate::config::VanguardConfig;
-use crate::iterator::{Iterator, NewIterator};
+use crate::iterator::{new_iterator, Iterator};
 use crate::types::{Query, QueryHandler};
-use anyhow::{self, bail};
+use anyhow;
 use r53::Message;
-
-const DEFAULT_MESSAGE_CACHE_SIZE: usize = 10000;
 
 #[derive(Clone)]
 pub struct Resolver {
@@ -23,7 +20,7 @@ impl Resolver {
         let auth_server = AuthServer::new(&config.auth);
         Resolver {
             auth_server,
-            iterator: NewIterator(config),
+            iterator: new_iterator(config),
         }
     }
 

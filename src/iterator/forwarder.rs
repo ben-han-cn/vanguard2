@@ -3,9 +3,8 @@ use std::net::IpAddr;
 use std::str::FromStr;
 
 use crate::config::ForwarderConfig;
-use anyhow;
 use domaintree::{DomainTree, NodeChain};
-use r53::{LabelSequence, Name};
+use r53::Name;
 
 use super::delegation_point::DelegationPoint;
 use super::host_selector::Host;

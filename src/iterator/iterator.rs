@@ -4,11 +4,11 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow;
-use r53::{message::SectionType, name::root, Message, MessageBuilder, RRType, RRset, Rcode};
+use r53::{message::SectionType, name::root, Message, MessageBuilder, RRType, Rcode};
 
 use super::delegation_point::DelegationPoint;
 use super::forwarder::ForwarderManager;
-use super::host_selector::{Host, HostSelector, RTTBasedHostSelector};
+use super::host_selector::{Host, RTTBasedHostSelector};
 use super::iter_event::{IterEvent, QueryState, ResponseType};
 use super::nsclient::{NSClient, NameServerClient};
 use super::roothint::RootHint;
@@ -22,7 +22,7 @@ const MAX_REFERRAL_COUNT: u8 = 30;
 const ITERATOR_TIMEOUT: Duration = Duration::from_secs(10);
 const DEFAULT_MESSAGE_CACHE_SIZE: usize = 10240;
 
-pub fn NewIterator(conf: &VanguardConfig) -> Iterator<NSClient> {
+pub fn new_iterator(conf: &VanguardConfig) -> Iterator<NSClient> {
     let host_selector = Arc::new(Mutex::new(RTTBasedHostSelector::new(10000)));
     let cache = Arc::new(Mutex::new(MessageCache::new(DEFAULT_MESSAGE_CACHE_SIZE)));
     let client = NSClient::new(host_selector.clone());
@@ -161,13 +161,18 @@ impl<C: NameServerClient + 'static> Iterator<C> {
                     event.next_state(QueryState::QueryResponse);
                 }
                 Err(e) => {
+                    warn!(
+                        "send query [{}] to {} get err {:?}",
+                        event.get_request().question.as_ref().unwrap(),
+                        host.to_string(),
+                        e
+                    );
                     if event.start_time.elapsed() > ITERATOR_TIMEOUT {
                         self.error_response(&mut event, Rcode::ServFail);
                     }
                 }
             },
             None => {
-                let zone = dp.zone();
                 let missing_server = dp.get_missing_server();
                 if let Some(name) = missing_server {
                     let query = Message::with_query(name, RRType::A);
@@ -176,6 +181,7 @@ impl<C: NameServerClient + 'static> Iterator<C> {
                     sub_event.set_base_event(event);
                     return sub_event;
                 } else {
+                    warn!("no nameserver is usable zone {}", dp.zone());
                     self.error_response(&mut event, Rcode::ServFail);
                 }
             }
@@ -270,11 +276,13 @@ impl<C: NameServerClient + 'static> Iterator<C> {
             }
         }
 
-        dp.add_probed_server(&event.get_original_request().question.as_ref().unwrap().name);
+        let nameserver = &event.get_original_request().question.as_ref().unwrap().name;
+        debug!("couldn't get any address for nameserver {}", nameserver);
+        dp.add_probed_server(nameserver);
         base_event
     }
 
-    fn process_finished(&mut self, mut event: IterEvent) -> Message {
+    fn process_finished(&mut self, event: IterEvent) -> Message {
         event.generate_final_response()
     }
 }

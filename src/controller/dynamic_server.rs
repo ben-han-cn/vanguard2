@@ -1,19 +1,18 @@
 use crate::auth::{AuthZone, ZoneUpdater};
 use anyhow::{self, bail};
-use r53::{util::StringBuffer, Name, RData, RRClass, RRTtl, RRType, RRset};
+use r53::{Name, RData, RRClass, RRTtl, RRType, RRset};
 use std::sync::{Arc, RwLock};
-use tonic::{transport::Server, Code, Request, Response, Status};
+use tonic::{Code, Request, Response, Status};
 
 pub mod dynamic_dns {
     tonic::include_proto!("dynamicdns");
 }
 
 use dynamic_dns::{
-    dynamic_update_interface_server::{DynamicUpdateInterface, DynamicUpdateInterfaceServer},
-    AddRRsetRequest, AddRRsetResponse, AddZoneRequest, AddZoneResponse, DeleteDomainRequest,
-    DeleteDomainResponse, DeleteRRsetRequest, DeleteRRsetResponse, DeleteRdataRequest,
-    DeleteRdataResponse, DeleteZoneRequest, DeleteZoneResponse, UpdateRdataRequest,
-    UpdateRdataResponse,
+    dynamic_update_interface_server::DynamicUpdateInterface, AddRRsetRequest, AddRRsetResponse,
+    AddZoneRequest, AddZoneResponse, DeleteDomainRequest, DeleteDomainResponse, DeleteRRsetRequest,
+    DeleteRRsetResponse, DeleteRdataRequest, DeleteRdataResponse, DeleteZoneRequest,
+    DeleteZoneResponse, UpdateRdataRequest, UpdateRdataResponse,
 };
 
 #[derive(Clone)]

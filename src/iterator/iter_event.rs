@@ -1,8 +1,6 @@
 use std::time::Instant;
 
 use super::delegation_point::DelegationPoint;
-use super::host_selector::Host;
-use crate::types::Query;
 use r53::{
     message::Section, message::SectionType, HeaderFlag, Message, MessageBuilder, RRset, Rcode,
 };
@@ -153,6 +151,7 @@ impl IterEvent {
             response.sections[0] = Section(Some(self.prepend_rrsets));
         }
         response.question = self.orignal_request.question.take();
+        response.edns = self.orignal_request.edns.take();
 
         let mut builder = MessageBuilder::new(&mut response);
         builder.set_flag(HeaderFlag::RecursionAvailable);

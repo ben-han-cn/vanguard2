@@ -6,7 +6,7 @@ mod iterator;
 mod nsclient;
 mod roothint;
 
-pub use iterator::{Iterator, NewIterator};
+pub use iterator::{new_iterator, Iterator};
 
 #[cfg(test)]
 mod iterator_test;

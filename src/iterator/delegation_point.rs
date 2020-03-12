@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::net::{IpAddr, SocketAddr};
+use std::net::IpAddr;
 
 use r53::{message::SectionType, Message, Name, RData, RRType, RRset};
 
@@ -39,7 +39,7 @@ impl DelegationPoint {
     }
 
     pub fn from_ns_rrset(zone: Name, ns: &RRset, glues: &Vec<RRset>) -> Self {
-        let mut server_and_hosts = ns.rdatas.iter().fold(
+        let server_and_hosts = ns.rdatas.iter().fold(
             HashMap::new(),
             |mut servers: HashMap<Name, Vec<Host>>, rdata| {
                 if let RData::NS(ref ns) = rdata {
