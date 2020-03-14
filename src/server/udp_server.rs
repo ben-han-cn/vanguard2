@@ -1,5 +1,5 @@
 use super::udp_stream_coder::UdpStreamCoder;
-use crate::types::{Query, QueryHandler};
+use crate::types::{Handler, Request};
 use futures::channel::mpsc::channel;
 use futures::{SinkExt, StreamExt};
 use prometheus::{IntCounter, IntGauge};
@@ -12,18 +12,26 @@ use tokio_util::udp::UdpFramed;
 
 lazy_static! {
     static ref QPS_UDP_INT_GAUGE: IntGauge =
-        register_int_gauge!("pqs", "query per second").unwrap();
+        register_int_gauge!("qps", "query per second").unwrap();
+    static ref RPS_UDP_INT_GAUGE: IntGauge =
+        register_int_gauge!("rps", "response per second").unwrap();
+    static ref CHPS_UDP_INT_GAUGE: IntGauge =
+        register_int_gauge!("chps", "cache hit per second").unwrap();
     static ref QC_UDP_INT_COUNT: IntCounter =
         register_int_counter!("qc", "query count until now").unwrap();
+    static ref RC_UDP_INT_COUNT: IntCounter =
+        register_int_counter!("rc", "response count until now").unwrap();
+    static ref CHC_UDP_INT_COUNT: IntCounter =
+        register_int_counter!("chc", "cache hit count").unwrap();
 }
 
 const QUERY_BUFFER_LEN: usize = 1024;
 
-pub struct UdpServer<H: QueryHandler> {
+pub struct UdpServer<H: Handler> {
     handler: H,
 }
 
-impl<H: QueryHandler> UdpServer<H> {
+impl<H: Handler> UdpServer<H> {
     pub fn new(handler: H) -> Self {
         UdpServer { handler }
     }
@@ -47,9 +55,13 @@ impl<H: QueryHandler> UdpServer<H> {
                 let mut sender_back = sender.clone();
                 let mut handler = self.handler.clone();
                 tokio::spawn(async move {
-                    let query = Query::new(request, src);
-                    if let Ok(response) = handler.handle_query(query).await {
-                        sender_back.try_send((response, src));
+                    let query = Request::new(request, src);
+                    if let Ok(response) = handler.resolve(query).await {
+                        RC_UDP_INT_COUNT.inc();
+                        if response.cache_hit {
+                            CHC_UDP_INT_COUNT.inc();
+                        }
+                        sender_back.try_send((response.response, src));
                     }
                 });
             }
@@ -60,10 +72,21 @@ impl<H: QueryHandler> UdpServer<H> {
 async fn calculate_qps() {
     let mut interval = time::interval(Duration::from_secs(1));
     let mut last_qc = 0;
+    let mut last_chc = 0;
+    let mut last_rc = 0;
     loop {
         interval.tick().await;
+
         let qc = QC_UDP_INT_COUNT.get() as u64;
         QPS_UDP_INT_GAUGE.set((qc - last_qc) as i64);
         last_qc = qc;
+
+        let rc = RC_UDP_INT_COUNT.get() as u64;
+        RPS_UDP_INT_GAUGE.set((rc - last_rc) as i64);
+        last_rc = rc;
+
+        let chc = CHC_UDP_INT_COUNT.get() as u64;
+        CHPS_UDP_INT_GAUGE.set((chc - last_chc) as i64);
+        last_chc = chc;
     }
 }

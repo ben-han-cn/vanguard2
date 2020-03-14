@@ -1,6 +1,7 @@
 use std::time::Instant;
 
 use super::delegation_point::DelegationPoint;
+use crate::types::{Response, ResponseCategory};
 use r53::{
     message::Section, message::SectionType, HeaderFlag, Message, MessageBuilder, RRset, Rcode,
 };
@@ -15,15 +16,6 @@ pub enum QueryState {
     Finished,
 }
 
-#[derive(Copy, Clone)]
-pub enum ResponseType {
-    Unknown,
-    Answer,
-    CName,
-    Throwaway,
-    Lame,
-}
-
 pub struct IterEvent {
     pub start_time: Instant,
     base_event: Option<Box<IterEvent>>,
@@ -32,13 +24,14 @@ pub struct IterEvent {
     current_request: Option<Message>,
 
     response: Option<Message>,
-    response_type: Option<ResponseType>,
+    response_category: Option<ResponseCategory>,
 
     state: QueryState,
     final_state: QueryState,
     prepend_rrsets: Vec<RRset>,
     delegation_point: Option<DelegationPoint>,
 
+    pub cache_hit: bool,
     pub target_queries: u8,
     pub current_queries: u8,
     pub query_restart_count: u8,
@@ -53,11 +46,12 @@ impl IterEvent {
             orignal_request: request,
             current_request: None,
             response: None,
-            response_type: None,
+            response_category: None,
             state: init_state,
             final_state,
             prepend_rrsets: Vec::new(),
             delegation_point: None,
+            cache_hit: false,
             target_queries: 0,
             current_queries: 0,
             query_restart_count: 0,
@@ -116,21 +110,28 @@ impl IterEvent {
         self.prepend_rrsets.append(&mut rrsets)
     }
 
-    pub fn set_response(&mut self, response: Message, typ: ResponseType) {
+    pub fn set_response(&mut self, response: Message, category: ResponseCategory) {
         self.response = Some(response);
-        self.response_type = Some(typ);
+        self.response_category = Some(category);
     }
 
     pub fn get_response(&self) -> Option<&Message> {
         self.response.as_ref()
     }
 
+    pub fn get_response_category(&self) -> Option<&ResponseCategory> {
+        self.response_category.as_ref()
+    }
+
     pub fn get_mut_response(&mut self) -> Option<&mut Message> {
         self.response.as_mut()
     }
 
-    pub fn take_response(&mut self) -> Option<Message> {
-        self.response.take()
+    pub fn take_response(&mut self) -> (Message, ResponseCategory) {
+        (
+            self.response.take().unwrap(),
+            self.response_category.take().unwrap(),
+        )
     }
 
     pub fn set_base_event(&mut self, e: IterEvent) {
@@ -142,7 +143,7 @@ impl IterEvent {
         self.base_event.take().map(|e| *e)
     }
 
-    pub fn generate_final_response(mut self) -> Message {
+    pub fn generate_final_response(mut self) -> Response {
         let mut response = self.response.take().expect("should has response");
         if response.header.rcode != Rcode::ServFail && !self.prepend_rrsets.is_empty() {
             if let Some(answers) = response.section_mut(SectionType::Answer) {
@@ -158,6 +159,8 @@ impl IterEvent {
         builder.clear_flag(HeaderFlag::AuthAnswer);
         builder.id(self.orignal_request.header.id);
         builder.done();
-        response
+        let mut resp = Response::new(response);
+        resp.cache_hit = self.cache_hit;
+        resp
     }
 }

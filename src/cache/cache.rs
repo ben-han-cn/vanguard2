@@ -61,12 +61,8 @@ impl MessageCache {
         }
     }
 
-    pub fn add_rrset(&mut self, rrset: RRset, trust_level: RRsetTrustLevel) {
-        if rrset.typ == RRType::SOA {
-            self.negative_cache.add_rrset(rrset, trust_level);
-        } else {
-            self.positive_cache.add_rrset(rrset, trust_level);
-        }
+    pub fn add_rrset_in_response(&mut self, message: Message) {
+        self.positive_cache.add_rrset_in_response(message);
     }
 
     pub fn get_deepest_ns(&mut self, name: &Name) -> Option<Name> {

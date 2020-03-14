@@ -1,5 +1,5 @@
 use super::zones::AuthZone;
-use crate::{config::AuthorityConfig, types::Query};
+use crate::{config::AuthorityConfig, types::Request};
 use r53::{Message, Name};
 use std::fs;
 use std::sync::{Arc, RwLock};
@@ -23,8 +23,8 @@ impl AuthServer {
         }
     }
 
-    pub fn handle_query(&self, query: &Query) -> Option<Message> {
-        self.zones.read().unwrap().handle_query(query)
+    pub fn resolve(&self, req: &Request) -> Option<Message> {
+        self.zones.read().unwrap().resolve(req)
     }
 
     pub fn zone_data(&self) -> Arc<RwLock<AuthZone>> {

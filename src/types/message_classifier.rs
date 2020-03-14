@@ -2,34 +2,35 @@ use r53::{
     header_flag::HeaderFlag, message::SectionType, opcode, Message, Name, RData, RRType, Rcode,
 };
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ResponseCategory {
     Answer,
     AnswerCName, //has final answer, but with cname chain
     CName(Name),
     NXDomain,
     NXRRset,
+    ServFail,
     Referral,
     FormErr,
-    Invalid(String),
+    Invalid(&'static str),
 }
 
 pub fn classify_response(name: &Name, typ: RRType, msg: &Message) -> ResponseCategory {
     if !msg.header.is_flag_set(HeaderFlag::QueryRespone) {
-        return ResponseCategory::Invalid("not response message".to_string());
+        return ResponseCategory::Invalid("not response message");
     }
 
     if msg.header.opcode != opcode::Opcode::Query {
-        return ResponseCategory::Invalid("not a query message".to_string());
+        return ResponseCategory::Invalid("not a query message");
     }
 
     if msg.question.is_none() {
-        return ResponseCategory::Invalid("short of question".to_string());
+        return ResponseCategory::Invalid("short of question");
     }
 
     let question = msg.question.as_ref().unwrap();
     if !question.name.eq(name) || question.typ != typ {
-        return ResponseCategory::Invalid("question doesn't match".to_string());
+        return ResponseCategory::Invalid("question doesn't match");
     }
 
     let rcode = msg.header.rcode;
@@ -41,8 +42,11 @@ pub fn classify_response(name: &Name, typ: RRType, msg: &Message) -> ResponseCat
             Rcode::FormErr => {
                 return ResponseCategory::FormErr;
             }
+            Rcode::ServFail => {
+                return ResponseCategory::ServFail;
+            }
             _ => {
-                return ResponseCategory::Invalid("invalid rcode".to_string());
+                return ResponseCategory::Invalid("invalid rcode");
             }
         }
     }
@@ -63,18 +67,18 @@ pub fn classify_response(name: &Name, typ: RRType, msg: &Message) -> ResponseCat
     let answer = answer.unwrap();
     if answer.len() == 1 {
         if !answer[0].name.eq(name) {
-            return ResponseCategory::Invalid("answer name doesn't match question".to_string());
+            return ResponseCategory::Invalid("answer name doesn't match question");
         }
 
         if answer[0].typ == typ {
             return ResponseCategory::Answer;
         } else if answer[0].typ == RRType::CNAME {
             if answer[0].rdatas.len() != 1 {
-                return ResponseCategory::Invalid("cname doesn't have one rdata".to_string());
+                return ResponseCategory::Invalid("cname doesn't have one rdata");
             }
             return ResponseCategory::CName(get_cname_target(&answer[0].rdatas[0]).clone());
         } else {
-            return ResponseCategory::Invalid("answer type doesn't match question".to_string());
+            return ResponseCategory::Invalid("answer type doesn't match question");
         }
     }
 
@@ -83,25 +87,25 @@ pub fn classify_response(name: &Name, typ: RRType, msg: &Message) -> ResponseCat
     let answer_count = answer.len();
     for (i, rrset) in answer.iter().enumerate() {
         if !rrset.name.eq(last_name) {
-            return ResponseCategory::Invalid("cname doesn't form a chain".to_string());
+            return ResponseCategory::Invalid("cname doesn't form a chain");
         }
 
         if i != answer_count - 1 {
             if rrset.typ != RRType::CNAME {
-                return ResponseCategory::Invalid("cname chain is broken".to_string());
+                return ResponseCategory::Invalid("cname chain is broken");
             }
             if rrset.rdatas.len() != 1 {
-                return ResponseCategory::Invalid("cname doesn't have one rdata".to_string());
+                return ResponseCategory::Invalid("cname doesn't have one rdata");
             }
             last_name = get_cname_target(&rrset.rdatas[0]);
         } else {
             if rrset.typ == RRType::CNAME {
                 if rrset.rdatas.len() != 1 {
-                    return ResponseCategory::Invalid("cname doesn't have one rdata".to_string());
+                    return ResponseCategory::Invalid("cname doesn't have one rdata");
                 }
                 return ResponseCategory::CName(get_cname_target(&rrset.rdatas[0]).clone());
             } else if rrset.typ != typ {
-                return ResponseCategory::Invalid("answer type doesn't match question".to_string());
+                return ResponseCategory::Invalid("answer type doesn't match question");
             } else {
                 return ResponseCategory::AnswerCName;
             }

@@ -13,6 +13,7 @@ use super::iterator::Iterator;
 use super::nsclient::NameServerClient;
 use crate::cache::MessageCache;
 use crate::config::{VanguardConfig, ZoneForwarderConfig};
+use crate::types::Request;
 use anyhow::{self, bail};
 use async_trait::async_trait;
 use r53::{message::SectionType, name::root, Message, MessageBuilder, Name, RRType, RRset, Rcode};
@@ -216,11 +217,13 @@ fn run_testcase(conf: &VanguardConfig, case: TestCase) {
 
     let qname = Name::new(case.qname.as_ref()).unwrap();
     let qtype = RRType::from_str(case.qtype.as_ref()).unwrap();
-    let response = rt
-        .block_on(iterator.resolve(Message::with_query(qname.clone(), qtype)))
-        .unwrap();
+    let request = Request::new(
+        Message::with_query(qname.clone(), qtype),
+        SocketAddr::from_str("127.0.0.1:6666").unwrap(),
+    );
+    let response = rt.block_on(iterator.resolve(request)).unwrap();
     let desired_response = case.response.to_message(&qname, qtype);
-    message_body_eq(&response, &desired_response);
+    message_body_eq(&response.response, &desired_response);
 }
 
 #[test]

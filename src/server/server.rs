@@ -1,6 +1,6 @@
 use super::{tcp_server::TcpServer, udp_server::UdpServer};
 use crate::config::ServerConfig;
-use crate::types::QueryHandler;
+use crate::types::Handler;
 use std::net::SocketAddr;
 
 pub struct Server {
@@ -13,7 +13,7 @@ impl Server {
         Server { addr }
     }
 
-    pub async fn run<H: QueryHandler + Send + Sync>(&self, handler: H) {
+    pub async fn run<H: Handler + Send + Sync>(&self, handler: H) {
         let mut udp_server = UdpServer::new(handler.clone());
         let tcp_server = TcpServer::new(handler);
         tokio::spawn(tcp_server.run(self.addr));

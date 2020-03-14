@@ -9,12 +9,12 @@ use r53::{message::SectionType, name::root, Message, MessageBuilder, RRType, Rco
 use super::delegation_point::DelegationPoint;
 use super::forwarder::ForwarderManager;
 use super::host_selector::{Host, RTTBasedHostSelector};
-use super::iter_event::{IterEvent, QueryState, ResponseType};
+use super::iter_event::{IterEvent, QueryState};
 use super::nsclient::{NSClient, NameServerClient};
 use super::roothint::RootHint;
 use crate::cache::MessageCache;
 use crate::config::VanguardConfig;
-use crate::types::{classify_response, ResponseCategory};
+use crate::types::{classify_response, Request, Response, ResponseCategory};
 
 const MAX_CNAME_REDIRECT_COUNT: u8 = 8;
 const MAX_DEPENDENT_QUERY_COUNT: u8 = 4;
@@ -57,13 +57,13 @@ impl<C: NameServerClient + 'static> Iterator<C> {
 
     pub fn resolve(
         &mut self,
-        query: Message,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Message>> + Send>> {
-        Box::pin(self.clone().handle_query(query))
+        req: Request,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Response>> + Send>> {
+        Box::pin(self.clone().do_resolve(req))
     }
 
-    async fn handle_query(mut self, query: Message) -> anyhow::Result<Message> {
-        let mut event = IterEvent::new(query, QueryState::InitQuery, QueryState::Finished);
+    async fn do_resolve(mut self, req: Request) -> anyhow::Result<Response> {
+        let mut event = IterEvent::new(req.request, QueryState::InitQuery, QueryState::Finished);
         loop {
             event = match event.get_state() {
                 QueryState::InitQuery => self.process_init_query(event),
@@ -106,15 +106,16 @@ impl<C: NameServerClient + 'static> Iterator<C> {
             .make_response()
             .rcode(rcode)
             .done();
-        event.set_response(response, ResponseType::Throwaway);
+        event.set_response(response, ResponseCategory::ServFail);
         event.next_state(event.get_final_state())
     }
 
     fn lookup_cache(&mut self, event: &mut IterEvent) -> bool {
         let mut cache = self.cache.lock().unwrap();
         if let Some(response) = cache.gen_response(&event.get_request()) {
-            event.set_response(response, ResponseType::Answer);
+            event.set_response(response, ResponseCategory::Answer);
             event.next_state(event.get_final_state());
+            event.cache_hit = true;
             true
         } else {
             false
@@ -157,7 +158,23 @@ impl<C: NameServerClient + 'static> Iterator<C> {
         match host {
             Some(host) => match self.client.query(event.get_request(), host).await {
                 Ok(response) => {
-                    event.set_response(response, ResponseType::Unknown);
+                    let question = event.get_request().question.as_ref().unwrap();
+                    let query_type = question.typ;
+                    let response_category =
+                        classify_response(&question.name, query_type, &response);
+                    match response_category {
+                        ResponseCategory::Answer | ResponseCategory::AnswerCName => {
+                            self.cache.lock().unwrap().add_response(response.clone());
+                        }
+                        ResponseCategory::CName(_) | ResponseCategory::Referral => {
+                            self.cache
+                                .lock()
+                                .unwrap()
+                                .add_rrset_in_response(response.clone());
+                        }
+                        _ => {}
+                    }
+                    event.set_response(response, response_category);
                     event.next_state(QueryState::QueryResponse);
                 }
                 Err(e) => {
@@ -195,36 +212,32 @@ impl<C: NameServerClient + 'static> Iterator<C> {
     }
 
     fn process_query_response(&mut self, mut event: IterEvent) -> IterEvent {
-        let question = event.get_request().question.as_ref().unwrap();
-        let query_type = question.typ;
-        let response_category =
-            classify_response(&question.name, query_type, event.get_response().unwrap());
+        let (response, response_category) = event.take_response();
         match response_category {
             ResponseCategory::Answer
             | ResponseCategory::AnswerCName
             | ResponseCategory::NXDomain
             | ResponseCategory::NXRRset => {
-                let response = event.get_response().unwrap();
-                self.cache.lock().unwrap().add_response(response.clone());
+                event.set_response(response, response_category);
                 event.next_state(event.get_final_state());
             }
+
             ResponseCategory::Referral => {
-                let response = event.take_response().unwrap();
                 let zone = response.question.as_ref().unwrap().name.clone();
                 let dp = DelegationPoint::from_referral_response(zone, &response);
-                self.cache.lock().unwrap().add_response(response);
                 event.referral_count += 1;
                 event.set_delegation_point(dp);
                 event.next_state(QueryState::QueryTarget);
             }
+
             ResponseCategory::CName(next) => {
-                let response = event.take_response().unwrap();
+                let query_type = event.get_request().question.as_ref().unwrap().typ;
                 event.add_prepend_rrsets(response.section(SectionType::Answer).unwrap().clone());
-                self.cache.lock().unwrap().add_response(response);
-                event.set_current_request(Message::with_query(next, query_type));
+                event.set_current_request(Message::with_query(next.clone(), query_type));
                 event.next_state(QueryState::InitQuery);
                 event.query_restart_count += 1;
             }
+
             _ => {
                 event.next_state(QueryState::QueryTarget);
             }
@@ -236,19 +249,19 @@ impl<C: NameServerClient + 'static> Iterator<C> {
         let mut base_event = event
             .take_base_event()
             .expect("prime event should always has base event");
-        match event.take_response() {
-            Some(response) => {
+        let (response, category) = event.take_response();
+        match category {
+            ResponseCategory::Answer => {
                 let zone = response.question.as_ref().unwrap().name.clone();
                 let dp = DelegationPoint::from_ns_rrset(
                     zone,
                     &response.section(SectionType::Answer).unwrap()[0],
                     response.section(SectionType::Additional).unwrap(),
                 );
-                self.cache.lock().unwrap().add_response(response);
                 base_event.set_delegation_point(dp);
                 base_event.next_state(QueryState::QueryTarget);
             }
-            None => {
+            _ => {
                 self.error_response(&mut base_event, Rcode::ServFail);
             }
         }
@@ -264,7 +277,9 @@ impl<C: NameServerClient + 'static> Iterator<C> {
         let dp = base_event
             .get_mut_delegation_point()
             .expect("target query should has delegation point set");
-        if let Some(mut response) = event.take_response() {
+
+        let (mut response, category) = event.take_response();
+        if category == ResponseCategory::Answer {
             if let Some(answers) = response.take_section(SectionType::Answer) {
                 if answers.len() == 1 {
                     let answer = &answers[0];
@@ -282,7 +297,15 @@ impl<C: NameServerClient + 'static> Iterator<C> {
         base_event
     }
 
-    fn process_finished(&mut self, event: IterEvent) -> Message {
-        event.generate_final_response()
+    fn process_finished(&mut self, event: IterEvent) -> Response {
+        let has_cname_redirect = event.query_restart_count > 0;
+        let resp = event.generate_final_response();
+        if has_cname_redirect && resp.response.header.rcode == Rcode::NoError {
+            self.cache
+                .lock()
+                .unwrap()
+                .add_response(resp.response.clone());
+        }
+        resp
     }
 }

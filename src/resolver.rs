@@ -5,9 +5,8 @@ use std::sync::{Arc, RwLock};
 use crate::auth::{AuthServer, AuthZone};
 use crate::config::VanguardConfig;
 use crate::iterator::{new_iterator, Iterator};
-use crate::types::{Query, QueryHandler};
+use crate::types::{Handler, Request, Response};
 use anyhow;
-use r53::Message;
 
 #[derive(Clone)]
 pub struct Resolver {
@@ -28,20 +27,20 @@ impl Resolver {
         self.auth_server.zone_data()
     }
 
-    async fn do_query(&mut self, query: Query) -> anyhow::Result<Message> {
-        if let Some(response) = self.auth_server.handle_query(&query) {
-            return Ok(response);
+    async fn do_resolve(&mut self, req: Request) -> anyhow::Result<Response> {
+        if let Some(response) = self.auth_server.resolve(&req) {
+            return Ok(Response::new(response));
         }
 
-        self.iterator.resolve(query.request).await
+        self.iterator.resolve(req).await
     }
 }
 
-impl QueryHandler for Resolver {
-    fn handle_query(
+impl Handler for Resolver {
+    fn resolve(
         &mut self,
-        query: Query,
-    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Message>> + Send + '_>> {
-        Box::pin(self.do_query(query))
+        req: Request,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<Response>> + Send + '_>> {
+        Box::pin(self.do_resolve(req))
     }
 }

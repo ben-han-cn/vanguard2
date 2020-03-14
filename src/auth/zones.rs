@@ -1,7 +1,7 @@
 use crate::auth::memory_zone::MemoryZone;
 use crate::auth::zone::{FindOption, FindResult, FindResultType, ZoneFinder};
 use crate::auth::zone_loader::load_zone;
-use crate::types::Query;
+use crate::types::Request;
 use anyhow::{bail, ensure, Result};
 use domaintree::{DomainTree, FindResultFlag};
 use r53::{HeaderFlag, Message, MessageBuilder, Name, RRType, Rcode};
@@ -39,8 +39,8 @@ impl AuthZone {
         Ok(())
     }
 
-    pub fn handle_query(&self, query: &Query) -> Option<Message> {
-        let question = query.question();
+    pub fn resolve(&self, req: &Request) -> Option<Message> {
+        let question = req.question();
         let zone = self.get_zone(&question.name);
         if zone.is_none() {
             return None;
@@ -50,7 +50,7 @@ impl AuthZone {
         let mut result = zone.find(&question.name, question.typ, FindOption::FollowZoneCut);
 
         let query_type = question.typ;
-        let mut response = query.request().clone();
+        let mut response = req.request.clone();
         let mut builder = MessageBuilder::new(&mut response);
         builder.make_response().set_flag(HeaderFlag::AuthAnswer);
         match result.typ {
