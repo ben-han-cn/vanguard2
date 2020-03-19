@@ -1,3 +1,4 @@
+mod aggregate_client;
 mod delegation_point;
 mod forwarder;
 mod host_selector;

@@ -6,6 +6,7 @@ use std::time::Duration;
 use anyhow;
 use r53::{message::SectionType, name::root, Message, MessageBuilder, RRType, Rcode};
 
+use super::aggregate_client::AggregateClient;
 use super::delegation_point::DelegationPoint;
 use super::forwarder::ForwarderManager;
 use super::host_selector::{Host, RTTBasedHostSelector};
@@ -19,19 +20,26 @@ use crate::types::{classify_response, Request, Response, ResponseCategory};
 const MAX_CNAME_REDIRECT_COUNT: u8 = 8;
 const MAX_DEPENDENT_QUERY_COUNT: u8 = 4;
 const MAX_REFERRAL_COUNT: u8 = 30;
+const MAX_ERROR_COUNT: u8 = 5;
 const ITERATOR_TIMEOUT: Duration = Duration::from_secs(10);
 const DEFAULT_MESSAGE_CACHE_SIZE: usize = 10240;
 
-pub fn new_iterator(conf: &VanguardConfig) -> Iterator<NSClient> {
+pub fn new_iterator(conf: &VanguardConfig) -> Iterator<AggregateClient<NSClient>> {
     let host_selector = Arc::new(Mutex::new(RTTBasedHostSelector::new(10000)));
     let cache = Arc::new(Mutex::new(MessageCache::new(DEFAULT_MESSAGE_CACHE_SIZE)));
     let client = NSClient::new(host_selector.clone());
     let forwarder = Arc::new(ForwarderManager::new(&conf.forwarder));
-    Iterator::new(cache, host_selector, forwarder, client)
+    //Iterator::new(cache, host_selector, forwarder, client)
+    Iterator::new(
+        cache,
+        host_selector,
+        forwarder,
+        AggregateClient::new(client),
+    )
 }
 
 #[derive(Clone)]
-pub struct Iterator<C = NSClient> {
+pub struct Iterator<C = AggregateClient<NSClient>> {
     cache: Arc<Mutex<MessageCache>>,
     roothint: Arc<RootHint>,
     host_selector: Arc<Mutex<RTTBasedHostSelector>>,
@@ -146,7 +154,7 @@ impl<C: NameServerClient + 'static> Iterator<C> {
     }
 
     async fn process_query_target(&mut self, mut event: IterEvent) -> IterEvent {
-        if event.referral_count > MAX_REFERRAL_COUNT {
+        if event.referral_count > MAX_REFERRAL_COUNT || event.error_count > MAX_ERROR_COUNT {
             self.error_response(&mut event, Rcode::ServFail);
             return event;
         }
@@ -179,13 +187,16 @@ impl<C: NameServerClient + 'static> Iterator<C> {
                 }
                 Err(e) => {
                     warn!(
-                        "send query [{}] to {} get err {:?}",
+                        "send query [{}] to {}[{}] get err {:?}",
                         event.get_request().question.as_ref().unwrap(),
+                        dp.zone(),
                         host.to_string(),
                         e
                     );
                     if event.start_time.elapsed() > ITERATOR_TIMEOUT {
                         self.error_response(&mut event, Rcode::ServFail);
+                    } else {
+                        event.error_count += 1;
                     }
                 }
             },

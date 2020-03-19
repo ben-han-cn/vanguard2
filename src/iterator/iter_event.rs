@@ -32,8 +32,7 @@ pub struct IterEvent {
     delegation_point: Option<DelegationPoint>,
 
     pub cache_hit: bool,
-    pub target_queries: u8,
-    pub current_queries: u8,
+    pub error_count: u8,
     pub query_restart_count: u8,
     pub referral_count: u8,
 }
@@ -52,8 +51,7 @@ impl IterEvent {
             prepend_rrsets: Vec::new(),
             delegation_point: None,
             cache_hit: false,
-            target_queries: 0,
-            current_queries: 0,
+            error_count: 0,
             query_restart_count: 0,
             referral_count: 0,
         }
