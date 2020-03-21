@@ -129,7 +129,10 @@ impl<C: NameServerClient> NameServerClient for AggregateClient<C> {
             Ok(ref msg) => Ok(msg.clone()),
             Err(ref e) => Err(e.to_string()),
         };
-        tx_after_new_query.unwrap().broadcast(Some(cloned_resp));
+
+        //if there is no aggregate qury, broadcast will return err, since no
+        //other receiver is waiting
+        let _ = tx_after_new_query.unwrap().broadcast(Some(cloned_resp));
         resp
     }
 }
@@ -191,7 +194,7 @@ mod tests {
 
     #[test]
     fn test_aggregate_all_client() {
-        let (mut tx, rx) = channel(0);
+        let (tx, rx) = channel(0);
         let inner_client = DumbClient::new(rx);
         let client = AggregateClient::new(inner_client.clone());
         let mut rt = Runtime::new().unwrap();
@@ -200,7 +203,7 @@ mod tests {
             .map(|_| {
                 let client_clone = client.clone();
                 rt.spawn(async move {
-                    let mut request = Message::with_query(Name::new("zdns.cn").unwrap(), RRType::A);
+                    let request = Message::with_query(Name::new("zdns.cn").unwrap(), RRType::A);
                     let resp = client_clone
                         .query(&request, IpAddr::V4(Ipv4Addr::new(2, 2, 2, 2)))
                         .await;
@@ -212,7 +215,7 @@ mod tests {
         handlers.push({
             let client_clone = client.clone();
             rt.spawn(async move {
-                let mut request = Message::with_query(Name::new("zdns.com").unwrap(), RRType::A);
+                let request = Message::with_query(Name::new("zdns.com").unwrap(), RRType::A);
                 let resp = client_clone
                     .query(&request, IpAddr::V4(Ipv4Addr::new(2, 2, 2, 2)))
                     .await;
@@ -231,7 +234,7 @@ mod tests {
                     }
                 }
                 assert_eq!(client.inflight_query_count(), 2 as usize);
-                tx.broadcast(1);
+                tx.broadcast(1).unwrap();
             })
             .unwrap();
 

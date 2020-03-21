@@ -234,7 +234,9 @@ impl<C: NameServerClient + 'static> Iterator<C> {
             }
 
             ResponseCategory::Referral => {
-                let zone = response.question.as_ref().unwrap().name.clone();
+                let zone = response.section(SectionType::Authority).unwrap()[0]
+                    .name
+                    .clone();
                 let dp = DelegationPoint::from_referral_response(zone, &response);
                 event.referral_count += 1;
                 event.set_delegation_point(dp);
