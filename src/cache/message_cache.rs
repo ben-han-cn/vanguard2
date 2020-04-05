@@ -1,7 +1,4 @@
-use super::{
-    cache::RRsetTrustLevel, entry_key::EntryKey, message_cache_entry::MessageEntry,
-    rrset_cache::RRsetLruCache,
-};
+use super::{entry_key::EntryKey, message_cache_entry::MessageEntry, rrset_cache::RRsetLruCache};
 use lru::LruCache;
 use r53::{Message, Name, RRType, RRset};
 
@@ -69,10 +66,6 @@ impl MessageLruCache {
 
     pub fn add_rrset_in_response(&mut self, message: Message) {
         MessageEntry::new(message, &mut self.rrset_cache);
-    }
-
-    pub fn add_rrset(&mut self, rrset: RRset, trust_level: RRsetTrustLevel) {
-        self.rrset_cache.add_rrset(rrset, trust_level);
     }
 
     pub fn get_rrset(&mut self, name: &Name, typ: RRType) -> Option<RRset> {

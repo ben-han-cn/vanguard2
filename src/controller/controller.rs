@@ -24,6 +24,7 @@ impl Controller {
         Server::builder()
             .add_service(DynamicUpdateInterfaceServer::new(self.dynamic_handler))
             .serve(self.addr)
-            .await;
+            .await
+            .unwrap();
     }
 }

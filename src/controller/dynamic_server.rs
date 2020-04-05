@@ -41,7 +41,7 @@ impl DynamicUpdateHandler {
 
     fn do_delete_domains(&self, zone: &Name, names: Vec<Name>) -> anyhow::Result<()> {
         let mut zones = self.zones.write().unwrap();
-        if let Some(zone) = zones.get_exact_zone(zone) {
+        if let Some(_zone) = zones.get_exact_zone(zone) {
             for name in names {
                 zones.delete_zone(&name)?;
             }
@@ -124,7 +124,7 @@ impl DynamicUpdateInterface for DynamicUpdateHandler {
             Ok(names) => {
                 let mut zones = self.zones.write().unwrap();
                 for name in &names {
-                    zones.delete_zone(name);
+                    zones.delete_zone(name).unwrap();
                 }
                 Ok(Response::new(DeleteZoneResponse {}))
             }

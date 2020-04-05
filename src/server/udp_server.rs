@@ -44,7 +44,7 @@ impl<H: Handler> UdpServer<H> {
         tokio::spawn(async move {
             loop {
                 let response = receiver.next().await.unwrap();
-                send_stream.send(response).await;
+                send_stream.send(response).await.unwrap();
             }
         });
         tokio::spawn(calculate_qps());
@@ -61,7 +61,7 @@ impl<H: Handler> UdpServer<H> {
                         if response.cache_hit {
                             CHC_UDP_INT_COUNT.inc();
                         }
-                        sender_back.try_send((response.response, src));
+                        sender_back.try_send((response.response, src)).unwrap();
                     }
                 });
             }

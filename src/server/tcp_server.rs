@@ -29,6 +29,7 @@ impl<H: Handler + Send + Sync> TcpServer<H> {
                 {
                     let query = Request::new(request, src);
                     if let Ok(response) = handler.clone().resolve(query).await {
+                        //TODO, add send timeout and error check
                         stream.send(response.response).await;
                     }
                 }

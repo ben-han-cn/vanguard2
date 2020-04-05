@@ -4,7 +4,7 @@ use std::{
     net::{IpAddr, SocketAddr},
     str::FromStr,
     sync::{Arc, Mutex},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use super::forwarder::ForwarderManager;
@@ -16,13 +16,9 @@ use crate::config::{VanguardConfig, ZoneForwarderConfig};
 use crate::types::Request;
 use anyhow::{self, bail};
 use async_trait::async_trait;
-use r53::{message::SectionType, name::root, Message, MessageBuilder, Name, RRType, RRset, Rcode};
+use r53::{message::SectionType, name::root, Message, MessageBuilder, Name, RRType, RRset};
 use serde::Deserialize;
-use std::{
-    fs::{read_dir, File},
-    io::prelude::*,
-    path::{Path, PathBuf},
-};
+use std::{fs::File, io::prelude::*, path::PathBuf};
 use tokio::runtime::Runtime;
 
 #[derive(Clone, Eq, PartialEq)]

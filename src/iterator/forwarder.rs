@@ -48,13 +48,9 @@ impl ForwarderManager {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
-    use super::super::delegation_point::DelegationPoint;
-    use super::super::host_selector::Host;
     use super::ForwarderManager;
     use crate::config::{ForwarderConfig, ZoneForwarderConfig};
-    use r53::{Name, RRset};
+    use r53::Name;
 
     #[test]
     fn test_forwarder_get_delegation_point() {

@@ -10,7 +10,7 @@ use std::{
 use anyhow::{bail, Error};
 use async_trait::async_trait;
 use r53::{question::Question, Message, Name, RRType};
-use tokio::sync::watch::{channel, Receiver, Sender};
+use tokio::sync::watch::{channel, Receiver};
 
 use super::host_selector::Host;
 use super::nsclient::NameServerClient;
@@ -147,7 +147,7 @@ mod tests {
     use async_trait::async_trait;
     use r53::{Message, Name, RRType};
     use tokio::runtime::Runtime;
-    use tokio::sync::watch::{channel, Receiver, Sender};
+    use tokio::sync::watch::{channel, Receiver};
     use tokio::task::JoinHandle;
 
     use super::super::host_selector::Host;
@@ -175,7 +175,7 @@ mod tests {
 
     #[async_trait]
     impl NameServerClient for DumbClient {
-        async fn query(&self, request: &Message, target: Host) -> anyhow::Result<Message> {
+        async fn query(&self, request: &Message, _target: Host) -> anyhow::Result<Message> {
             self.query_count.fetch_add(1 as u8, Ordering::Relaxed);
             let mut receiver = {
                 let receiver = self.receiver.lock().unwrap();

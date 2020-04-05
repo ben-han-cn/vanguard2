@@ -41,7 +41,7 @@ impl Decoder for TcpStreamCoder {
                 return Ok(None);
             }
             self.message_len = Some(Cursor::new(&mut *src).get_u16());
-            src.split_to(2);
+            let _ = src.split_to(2);
         }
 
         let message_len = self.message_len.unwrap();

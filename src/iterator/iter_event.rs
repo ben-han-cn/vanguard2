@@ -113,18 +113,6 @@ impl IterEvent {
         self.response_category = Some(category);
     }
 
-    pub fn get_response(&self) -> Option<&Message> {
-        self.response.as_ref()
-    }
-
-    pub fn get_response_category(&self) -> Option<&ResponseCategory> {
-        self.response_category.as_ref()
-    }
-
-    pub fn get_mut_response(&mut self) -> Option<&mut Message> {
-        self.response.as_mut()
-    }
-
     pub fn take_response(&mut self) -> (Message, ResponseCategory) {
         (
             self.response.take().unwrap(),

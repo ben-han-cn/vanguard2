@@ -179,8 +179,8 @@ mod tests {
 
     struct DumbSelector;
     impl HostSelector for DumbSelector {
-        fn set_rtt(&mut self, host: Host, rtt: Duration) {}
-        fn set_timeout(&mut self, host: Host, timeout: Duration) {}
+        fn set_rtt(&mut self, _host: Host, _rtt: Duration) {}
+        fn set_timeout(&mut self, _host: Host, _timeout: Duration) {}
         //assume hosts isn't empty
         fn select(&self, hosts: &[Host]) -> Option<Host> {
             Some(hosts[0])
