@@ -1,7 +1,7 @@
 use super::{entry_key::EntryKey, message_util::get_rrset_trust_level, rrset_cache::RRsetLruCache};
 use r53::{
     header_flag::HeaderFlag, message::SectionType, Message, MessageBuilder, Name, RRTtl, RRType,
-    RRset,
+    RRset, Rcode,
 };
 use std::time::{Duration, Instant};
 
@@ -15,6 +15,7 @@ pub struct RRsetRef {
 pub struct MessageEntry {
     name: *mut Name,
     typ: RRType,
+    rcode: Rcode,
     answer_rrset_count: u16,
     auth_rrset_count: u16,
     additional_rrset_count: u16,
@@ -35,6 +36,7 @@ impl MessageEntry {
         let mut entry = MessageEntry {
             name: Box::into_raw(Box::new(question.name)),
             typ: qtype,
+            rcode: message.header.rcode,
             answer_rrset_count,
             auth_rrset_count,
             additional_rrset_count,
@@ -121,7 +123,8 @@ impl MessageEntry {
         let mut builder = MessageBuilder::new(&mut response);
         builder
             .make_response()
-            .set_flag(HeaderFlag::RecursionAvailable);
+            .set_flag(HeaderFlag::RecursionAvailable)
+            .rcode(self.rcode);
         let mut iter = rrsets.unwrap().into_iter();
         for _ in 0..self.answer_rrset_count {
             builder.add_answer(iter.next().unwrap());

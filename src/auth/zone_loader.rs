@@ -11,8 +11,16 @@ pub fn load_zone(name: Name, content: &str) -> Result<MemoryZone> {
         if line.is_empty() {
             continue;
         }
-        let rrset = RRset::from_str(line)?;
-        zone.add_rrset(rrset)?;
+        match RRset::from_str(line) {
+            Ok(rrset) => zone.add_rrset(rrset)?,
+            Err(e) => {
+                if e.to_string().find("support").is_none() {
+                    return Err(e);
+                } else {
+                    warn!("rr {} isn't support", line);
+                }
+            }
+        }
     }
     Ok(zone)
 }
