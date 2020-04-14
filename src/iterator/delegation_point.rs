@@ -11,6 +11,7 @@ pub struct DelegationPoint {
     zone: Name,
     server_and_hosts: HashMap<Name, Vec<Host>>,
     probed_server: Vec<Name>,
+    lame_host: Vec<Host>,
 }
 
 impl DelegationPoint {
@@ -19,6 +20,7 @@ impl DelegationPoint {
             zone,
             server_and_hosts,
             probed_server: Vec::new(),
+            lame_host: Vec::new(),
         }
     }
 
@@ -53,14 +55,15 @@ impl DelegationPoint {
             zone,
             server_and_hosts,
             probed_server: Vec::new(),
+            lame_host: Vec::new(),
         };
 
         glues.iter().for_each(|glue| dp.add_glue(glue));
         dp
     }
 
-    pub fn from_cache(zone: &Name, cache: &mut MessageCache) -> Option<Self> {
-        let closest_zone = cache.get_deepest_ns(zone)?;
+    pub fn from_cache(qname: &Name, cache: &mut MessageCache) -> Option<Self> {
+        let closest_zone = cache.get_deepest_ns(qname)?;
         let ns = cache.get_rrset(&closest_zone, RRType::NS)?;
         let glues = ns.rdatas.iter().fold(Vec::new(), |mut glues, rdata| {
             if let RData::NS(ref ns) = rdata {
@@ -70,7 +73,7 @@ impl DelegationPoint {
             }
             glues
         });
-        Some(DelegationPoint::from_ns_rrset(zone.clone(), &ns, &glues))
+        Some(DelegationPoint::from_ns_rrset(closest_zone, &ns, &glues))
     }
 
     pub fn zone(&self) -> &Name {
@@ -97,7 +100,13 @@ impl DelegationPoint {
             .server_and_hosts
             .values()
             .flatten()
-            .map(|a| *a)
+            .filter_map(|a| {
+                if self.lame_host.iter().position(|h| h == a).is_none() {
+                    Some(*a)
+                } else {
+                    None
+                }
+            })
             .collect();
         if hosts.is_empty() {
             None
@@ -120,8 +129,11 @@ impl DelegationPoint {
 
     pub fn add_probed_server(&mut self, name: &Name) {
         assert!(self.server_and_hosts.contains_key(name));
-
         self.probed_server.push(name.clone());
+    }
+
+    pub fn mark_server_lame(&mut self, host: Host) {
+        self.lame_host.push(host);
     }
 }
 

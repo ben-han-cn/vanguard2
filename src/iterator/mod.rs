@@ -4,6 +4,7 @@ mod forwarder;
 mod host_selector;
 mod iter_event;
 mod iterator;
+mod message_helper;
 mod nsclient;
 mod roothint;
 

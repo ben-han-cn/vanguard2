@@ -4,18 +4,19 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow;
-use r53::{message::SectionType, name::root, Message, MessageBuilder, RRType, Rcode};
+use r53::{message::SectionType, name::root, Message, MessageBuilder, RData, RRType, Rcode};
 
 use super::aggregate_client::AggregateClient;
 use super::delegation_point::DelegationPoint;
 use super::forwarder::ForwarderManager;
 use super::host_selector::{Host, RTTBasedHostSelector};
 use super::iter_event::{IterEvent, QueryState};
+use super::message_helper::{sanitize_and_classify_response, ResponseCategory};
 use super::nsclient::{NSClient, NameServerClient};
 use super::roothint::RootHint;
 use crate::cache::MessageCache;
 use crate::config::VanguardConfig;
-use crate::types::{classify_response, Request, Response, ResponseCategory};
+use crate::types::{Request, Response};
 
 const MAX_CNAME_REDIRECT_COUNT: u8 = 8;
 const MAX_DEPENDENT_QUERY_COUNT: u8 = 4;
@@ -165,16 +166,39 @@ impl<C: NameServerClient + 'static> Iterator<C> {
         let host = self.select_host(dp);
         match host {
             Some(host) => match self.client.query(event.get_request(), host).await {
-                Ok(response) => {
+                Ok(mut response) => {
                     let question = event.get_request().question.as_ref().unwrap();
-                    let query_type = question.typ;
-                    let response_category =
-                        classify_response(&question.name, query_type, &response);
+                    let response_category = match sanitize_and_classify_response(
+                        dp.zone(),
+                        &question.name,
+                        question.typ,
+                        &mut response,
+                    ) {
+                        Ok(category) => category,
+                        Err(e) => {
+                            warn!(
+                                "send query [{}] to {}[{}] get response {} with err {:?}",
+                                event.get_request().question.as_ref().unwrap(),
+                                dp.zone(),
+                                host.to_string(),
+                                response,
+                                e
+                            );
+                            event
+                                .get_mut_delegation_point()
+                                .expect("no dp set in query target state")
+                                .mark_server_lame(host);
+                            return event;
+                        }
+                    };
+
                     match response_category {
-                        ResponseCategory::Answer | ResponseCategory::AnswerCName => {
+                        ResponseCategory::Answer
+                        | ResponseCategory::NXDomain
+                        | ResponseCategory::NXRRset => {
                             self.cache.lock().unwrap().add_response(response.clone());
                         }
-                        ResponseCategory::CName(_) | ResponseCategory::Referral => {
+                        ResponseCategory::CName | ResponseCategory::Referral => {
                             self.cache
                                 .lock()
                                 .unwrap()
@@ -186,13 +210,6 @@ impl<C: NameServerClient + 'static> Iterator<C> {
                     event.next_state(QueryState::QueryResponse);
                 }
                 Err(e) => {
-                    warn!(
-                        "send query [{}] to {}[{}] get err {:?}",
-                        event.get_request().question.as_ref().unwrap(),
-                        dp.zone(),
-                        host.to_string(),
-                        e
-                    );
                     if event.start_time.elapsed() > ITERATOR_TIMEOUT {
                         self.error_response(&mut event, Rcode::ServFail);
                     } else {
@@ -225,10 +242,7 @@ impl<C: NameServerClient + 'static> Iterator<C> {
     fn process_query_response(&mut self, mut event: IterEvent) -> IterEvent {
         let (response, response_category) = event.take_response();
         match response_category {
-            ResponseCategory::Answer
-            | ResponseCategory::AnswerCName
-            | ResponseCategory::NXDomain
-            | ResponseCategory::NXRRset => {
+            ResponseCategory::Answer | ResponseCategory::NXDomain | ResponseCategory::NXRRset => {
                 event.set_response(response, response_category);
                 event.next_state(event.get_final_state());
             }
@@ -243,10 +257,14 @@ impl<C: NameServerClient + 'static> Iterator<C> {
                 event.next_state(QueryState::QueryTarget);
             }
 
-            ResponseCategory::CName(next) => {
+            ResponseCategory::CName => {
+                let next = match response.section(SectionType::Answer).unwrap()[0].rdatas[0] {
+                    RData::CName(ref cname) => cname.name.clone(),
+                    _ => unreachable!(),
+                };
                 let query_type = event.get_request().question.as_ref().unwrap().typ;
                 event.add_prepend_rrsets(response.section(SectionType::Answer).unwrap().clone());
-                event.set_current_request(Message::with_query(next.clone(), query_type));
+                event.set_current_request(Message::with_query(next, query_type));
                 event.next_state(QueryState::InitQuery);
                 event.query_restart_count += 1;
             }
