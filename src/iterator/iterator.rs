@@ -210,6 +210,14 @@ impl<C: NameServerClient + 'static> Iterator<C> {
                     event.next_state(QueryState::QueryResponse);
                 }
                 Err(e) => {
+                    debug!(
+                        "send query [{}] to {}[{}] failed with err {:?}",
+                        event.get_request().question.as_ref().unwrap(),
+                        dp.zone(),
+                        host.to_string(),
+                        e
+                    );
+
                     if event.start_time.elapsed() > ITERATOR_TIMEOUT {
                         self.error_response(&mut event, Rcode::ServFail);
                     } else {

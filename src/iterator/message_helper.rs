@@ -1,8 +1,5 @@
 use anyhow::{self, bail};
-use r53::{
-    header_flag::HeaderFlag, message::SectionType, opcode, Message, Name, RData, RRType, RRset,
-    Rcode,
-};
+use r53::{header_flag::HeaderFlag, message::SectionType, opcode, Message, Name, RRType, Rcode};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ResponseCategory {
@@ -40,11 +37,11 @@ pub fn sanitize_and_classify_response(
 
     let is_auth_answer = resp.header.is_flag_set(HeaderFlag::AuthAnswer);
     let mut has_answer = false;
-    let mut is_cname_answer = false;
-    let mut response_category = if resp.header.rcode == Rcode::NoError {
-        ResponseCategory::NXRRset
-    } else {
-        ResponseCategory::NXDomain
+    let mut response_category = match resp.header.rcode {
+        Rcode::NoError => ResponseCategory::NXRRset,
+        Rcode::ServFail => ResponseCategory::ServFail,
+        Rcode::NXDomain => ResponseCategory::NXDomain,
+        _ => ResponseCategory::FormErr,
     };
 
     let rcode = resp.header.rcode;
@@ -69,7 +66,6 @@ pub fn sanitize_and_classify_response(
 
         if typ != RRType::CNAME && rrsets[0].typ == RRType::CNAME {
             response_category = ResponseCategory::CName;
-            is_cname_answer = true;
         } else {
             response_category = ResponseCategory::Answer;
         }
