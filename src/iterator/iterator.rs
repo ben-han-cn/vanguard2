@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use anyhow;
-use r53::{message::SectionType, name::root, Message, MessageBuilder, RData, RRType, Rcode};
+use r53::{name::root, Message, MessageBuilder, RData, RRType, Rcode, SectionType};
 
 use super::aggregate_client::AggregateClient;
 use super::delegation_point::DelegationPoint;

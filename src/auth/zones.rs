@@ -4,7 +4,7 @@ use crate::auth::zone_loader::load_zone;
 use crate::types::Request;
 use anyhow::{bail, ensure, Result};
 use domaintree::{DomainTree, FindResultFlag};
-use r53::{HeaderFlag, Message, MessageBuilder, Name, RRType, Rcode};
+use r53::{HeaderFlag, Message, MessageBuilder, Name, RRType, Rcode, SectionType};
 
 pub struct AuthZone {
     zones: DomainTree<MemoryZone>,
@@ -55,38 +55,38 @@ impl AuthZone {
         builder.make_response().set_flag(HeaderFlag::AuthAnswer);
         match result.typ {
             FindResultType::CName => {
-                builder.add_answer(result.rrset.take().unwrap());
+                builder.add_rrset(SectionType::Answer, result.rrset.take().unwrap());
             }
             FindResultType::Success => {
                 for rrset in result.get_additional() {
-                    builder.add_additional(rrset);
+                    builder.add_rrset(SectionType::Additional, rrset);
                 }
-                builder.add_answer(result.rrset.take().unwrap());
+                builder.add_rrset(SectionType::Answer, result.rrset.take().unwrap());
                 if query_type != RRType::NS {
                     let (auth, additional) = result.get_apex_ns_and_glue();
-                    builder.add_auth(auth);
+                    builder.add_rrset(SectionType::Authority, auth);
                     for rrset in additional {
-                        builder.add_additional(rrset);
+                        builder.add_rrset(SectionType::Additional, rrset);
                     }
                 }
             }
             FindResultType::Delegation => {
                 for rrset in result.get_additional() {
-                    builder.add_additional(rrset);
+                    builder.add_rrset(SectionType::Additional, rrset);
                 }
                 builder
                     .clear_flag(HeaderFlag::AuthAnswer)
-                    .add_auth(result.rrset.take().unwrap());
+                    .add_rrset(SectionType::Authority, result.rrset.take().unwrap());
             }
             FindResultType::NXDomain => {
                 builder
                     .rcode(Rcode::NXDomain)
-                    .add_auth(result.get_apex_soa());
+                    .add_rrset(SectionType::Authority, result.get_apex_soa());
             }
             FindResultType::NXRRset => {
                 builder
                     .rcode(Rcode::NoError)
-                    .add_auth(result.get_apex_soa());
+                    .add_rrset(SectionType::Authority, result.get_apex_soa());
             }
         }
         builder.done();

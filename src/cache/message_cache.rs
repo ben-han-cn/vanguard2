@@ -76,9 +76,7 @@ impl MessageLruCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use r53::{
-        edns::Edns, header_flag, message::SectionType, MessageBuilder, RRType, RRset, Rcode,
-    };
+    use r53::{edns::Edns, header_flag, MessageBuilder, RRType, RRset, Rcode, SectionType};
     use std::str::FromStr;
 
     fn build_positive_response() -> Message {
@@ -89,10 +87,22 @@ mod tests {
                 .id(1200)
                 .rcode(Rcode::NoError)
                 .set_flag(header_flag::HeaderFlag::RecursionDesired)
-                .add_answer(RRset::from_str("test.example.com. 3600 IN A 192.0.2.2").unwrap())
-                .add_answer(RRset::from_str("test.example.com. 3600 IN A 192.0.2.1").unwrap())
-                .add_auth(RRset::from_str("example.com. 100 IN NS ns1.example.com.").unwrap())
-                .add_additional(RRset::from_str("ns1.example.com. 3600 IN A 2.2.2.2").unwrap())
+                .add_rrset(
+                    SectionType::Answer,
+                    RRset::from_str("test.example.com. 3600 IN A 192.0.2.2").unwrap(),
+                )
+                .add_rrset(
+                    SectionType::Answer,
+                    RRset::from_str("test.example.com. 3600 IN A 192.0.2.1").unwrap(),
+                )
+                .add_rrset(
+                    SectionType::Authority,
+                    RRset::from_str("example.com. 100 IN NS ns1.example.com.").unwrap(),
+                )
+                .add_rrset(
+                    SectionType::Additional,
+                    RRset::from_str("ns1.example.com. 3600 IN A 2.2.2.2").unwrap(),
+                )
                 .edns(Edns {
                     versoin: 0,
                     extened_rcode: 0,

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::net::IpAddr;
 
-use r53::{message::SectionType, Message, Name, RData, RRType, RRset};
+use r53::{Message, Name, RData, RRType, RRset, SectionType};
 
 use super::host_selector::{Host, HostSelector};
 use crate::cache::MessageCache;

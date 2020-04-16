@@ -1,5 +1,5 @@
 use anyhow::{self, bail};
-use r53::{header_flag::HeaderFlag, message::SectionType, opcode, Message, Name, RRType, Rcode};
+use r53::{header_flag::HeaderFlag, opcode, Message, Name, RRType, Rcode, SectionType};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ResponseCategory {

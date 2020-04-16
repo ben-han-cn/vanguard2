@@ -1,7 +1,7 @@
 use super::{entry_key::EntryKey, message_util::get_rrset_trust_level, rrset_cache::RRsetLruCache};
 use r53::{
-    header_flag::HeaderFlag, message::SectionType, Message, MessageBuilder, Name, RRTtl, RRType,
-    RRset, Rcode,
+    header_flag::HeaderFlag, Message, MessageBuilder, Name, RRTtl, RRType, RRset, Rcode,
+    SectionType,
 };
 use std::time::{Duration, Instant};
 
@@ -127,14 +127,14 @@ impl MessageEntry {
             .rcode(self.rcode);
         let mut iter = rrsets.unwrap().into_iter();
         for _ in 0..self.answer_rrset_count {
-            builder.add_answer(iter.next().unwrap());
+            builder.add_rrset(SectionType::Answer, iter.next().unwrap());
         }
         for _ in 0..self.auth_rrset_count {
-            builder.add_auth(iter.next().unwrap());
+            builder.add_rrset(SectionType::Authority, iter.next().unwrap());
         }
 
         for _ in 0..self.additional_rrset_count {
-            builder.add_additional(iter.next().unwrap());
+            builder.add_rrset(SectionType::Additional, iter.next().unwrap());
         }
         builder.done();
         Some(response)
@@ -198,10 +198,22 @@ mod tests {
                 .id(1200)
                 .rcode(Rcode::NoError)
                 .set_flag(HeaderFlag::RecursionDesired)
-                .add_answer(RRset::from_str("test.example.com. 3600 IN A 192.0.2.2").unwrap())
-                .add_answer(RRset::from_str("test.example.com. 3600 IN A 192.0.2.1").unwrap())
-                .add_auth(RRset::from_str("example.com. 10 IN NS ns1.example.com.").unwrap())
-                .add_additional(RRset::from_str("ns1.example.com. 3600 IN A 2.2.2.2").unwrap())
+                .add_rrset(
+                    SectionType::Answer,
+                    RRset::from_str("test.example.com. 3600 IN A 192.0.2.2").unwrap(),
+                )
+                .add_rrset(
+                    SectionType::Answer,
+                    RRset::from_str("test.example.com. 3600 IN A 192.0.2.1").unwrap(),
+                )
+                .add_rrset(
+                    SectionType::Authority,
+                    RRset::from_str("example.com. 10 IN NS ns1.example.com.").unwrap(),
+                )
+                .add_rrset(
+                    SectionType::Additional,
+                    RRset::from_str("ns1.example.com. 3600 IN A 2.2.2.2").unwrap(),
+                )
                 .edns(Edns {
                     versoin: 0,
                     extened_rcode: 0,
@@ -222,7 +234,7 @@ mod tests {
                 .id(1200)
                 .rcode(Rcode::NXDomain)
                 .set_flag(HeaderFlag::RecursionDesired)
-                .add_auth(RRset::from_str("example.com. 30 IN SOA a.gtld-servers.net. nstld.verisign-grs.com. 1563935574 1800 900 604800 86400").unwrap())
+                .add_rrset(SectionType::Authority, RRset::from_str("example.com. 30 IN SOA a.gtld-servers.net. nstld.verisign-grs.com. 1563935574 1800 900 604800 86400").unwrap())
                 .edns(Edns {
                     versoin: 0,
                     extened_rcode: 0,

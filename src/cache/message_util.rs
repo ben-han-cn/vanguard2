@@ -1,5 +1,5 @@
 use super::cache::RRsetTrustLevel;
-use r53::{header_flag, message::SectionType, Message};
+use r53::{header_flag, Message, SectionType};
 
 pub(crate) fn get_rrset_trust_level(message: &Message, section: SectionType) -> RRsetTrustLevel {
     let aa = header_flag::is_flag_set(message.header.flag, header_flag::HeaderFlag::AuthAnswer);

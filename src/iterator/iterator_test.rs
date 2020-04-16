@@ -16,7 +16,7 @@ use crate::config::{VanguardConfig, ZoneForwarderConfig};
 use crate::types::Request;
 use anyhow::{self, bail};
 use async_trait::async_trait;
-use r53::{message::SectionType, name::root, Message, MessageBuilder, Name, RRType, RRset};
+use r53::{name::root, Message, MessageBuilder, Name, RRType, RRset, SectionType};
 use serde::Deserialize;
 use std::{fs::File, io::prelude::*, path::PathBuf};
 use tokio::runtime::Runtime;
@@ -100,15 +100,15 @@ fn gen_response(
     let mut response = Message::with_query(name, typ);
     let mut builder = MessageBuilder::new(&mut response);
     for answer in answers {
-        builder.add_answer(answer);
+        builder.add_rrset(SectionType::Answer, answer);
     }
 
     for auth in auths {
-        builder.add_auth(auth);
+        builder.add_rrset(SectionType::Authority, auth);
     }
 
     for additional in additionals {
-        builder.add_additional(additional);
+        builder.add_rrset(SectionType::Additional, additional);
     }
     builder.make_response();
     builder.done();

@@ -3,9 +3,7 @@ use std::time::Instant;
 use super::delegation_point::DelegationPoint;
 use super::message_helper::ResponseCategory;
 use crate::types::Response;
-use r53::{
-    message::Section, message::SectionType, HeaderFlag, Message, MessageBuilder, RRset, Rcode,
-};
+use r53::{message::Section, HeaderFlag, Message, MessageBuilder, RRset, Rcode, SectionType};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum QueryState {

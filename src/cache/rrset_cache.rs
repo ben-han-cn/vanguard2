@@ -1,6 +1,8 @@
 use super::{cache::RRsetTrustLevel, entry_key::EntryKey, rrset_cache_entry::RRsetEntry};
 use lru::LruCache;
-use r53::{header_flag::HeaderFlag, Message, MessageBuilder, Name, RData, RRType, RRset};
+use r53::{
+    header_flag::HeaderFlag, Message, MessageBuilder, Name, RData, RRType, RRset, SectionType,
+};
 
 pub struct RRsetLruCache {
     rrsets: LruCache<EntryKey, RRsetEntry>,
@@ -44,17 +46,17 @@ impl RRsetLruCache {
                             if ns.name.is_subdomain(&rrset.name) {
                                 let key = EntryKey(&ns.name as *const Name, RRType::A);
                                 if let Some(rrset) = self.get_rrset_with_key(&key) {
-                                    builder.add_additional(rrset);
+                                    builder.add_rrset(SectionType::Additional, rrset);
                                 }
                                 let key = EntryKey(&ns.name as *const Name, RRType::AAAA);
                                 if let Some(rrset) = self.get_rrset_with_key(&key) {
-                                    builder.add_additional(rrset);
+                                    builder.add_rrset(SectionType::Additional, rrset);
                                 }
                             }
                         }
                     }
                 }
-                builder.add_answer(rrset).done();
+                builder.add_rrset(SectionType::Answer, rrset).done();
                 Some(response)
             }
             None => None,
