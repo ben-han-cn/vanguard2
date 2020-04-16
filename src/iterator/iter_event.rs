@@ -3,7 +3,7 @@ use std::time::Instant;
 use super::delegation_point::DelegationPoint;
 use super::message_helper::ResponseCategory;
 use crate::types::Response;
-use r53::{message::Section, HeaderFlag, Message, MessageBuilder, RRset, Rcode, SectionType};
+use r53::{HeaderFlag, Message, MessageBuilder, RRset, Rcode, SectionType};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum QueryState {
@@ -130,20 +130,24 @@ impl IterEvent {
 
     pub fn generate_final_response(mut self) -> Response {
         let mut response = self.response.take().expect("should has response");
-        if response.header.rcode != Rcode::ServFail && !self.prepend_rrsets.is_empty() {
-            if let Some(answers) = response.section_mut(SectionType::Answer) {
-                self.prepend_rrsets.append(answers);
-            }
-            response.sections[0] = Section(Some(self.prepend_rrsets));
+        if !self.prepend_rrsets.is_empty() {
+            response
+                .take_section(SectionType::Answer)
+                .map(|mut answers| self.prepend_rrsets.append(&mut answers));
         }
         response.question = self.orignal_request.question.take();
         response.edns = self.orignal_request.edns.take();
 
         let mut builder = MessageBuilder::new(&mut response);
-        builder.set_flag(HeaderFlag::RecursionAvailable);
-        builder.clear_flag(HeaderFlag::AuthAnswer);
-        builder.id(self.orignal_request.header.id);
-        builder.done();
+        for rrset in self.prepend_rrsets {
+            builder.add_rrset(SectionType::Answer, rrset);
+        }
+
+        builder
+            .set_flag(HeaderFlag::RecursionAvailable)
+            .clear_flag(HeaderFlag::AuthAnswer)
+            .id(self.orignal_request.header.id)
+            .done();
         let mut resp = Response::new(response);
         resp.cache_hit = self.cache_hit;
         resp
