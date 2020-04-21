@@ -63,7 +63,7 @@ impl RootHint {
             });
 
         RootHint {
-            delegation_point: DelegationPoint::from_ns_rrset(root(), &root_ns, &root_glues),
+            delegation_point: DelegationPoint::from_ns_rrset(&root_ns, &root_glues),
         }
     }
 

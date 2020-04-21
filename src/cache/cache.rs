@@ -53,7 +53,7 @@ impl MessageCache {
         self.positive_cache.add_rrset_in_response(message);
     }
 
-    pub fn get_deepest_ns(&mut self, name: &Name) -> Option<Name> {
+    pub fn get_deepest_ns(&mut self, name: &Name) -> Option<RRset> {
         self.positive_cache.get_deepest_ns(name)
     }
 

@@ -256,10 +256,7 @@ impl<C: NameServerClient + 'static> Iterator<C> {
             }
 
             ResponseCategory::Referral => {
-                let zone = response.section(SectionType::Authority).unwrap()[0]
-                    .name
-                    .clone();
-                let dp = DelegationPoint::from_referral_response(zone, &response);
+                let dp = DelegationPoint::from_referral_response(&response);
                 event.referral_count += 1;
                 event.set_delegation_point(dp);
                 event.next_state(QueryState::QueryTarget);
@@ -291,9 +288,7 @@ impl<C: NameServerClient + 'static> Iterator<C> {
         let (response, category) = event.take_response();
         match category {
             ResponseCategory::Answer => {
-                let zone = response.question.as_ref().unwrap().name.clone();
                 let dp = DelegationPoint::from_ns_rrset(
-                    zone,
                     &response.section(SectionType::Answer).unwrap()[0],
                     response.section(SectionType::Additional).unwrap(),
                 );

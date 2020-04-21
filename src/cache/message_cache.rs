@@ -24,10 +24,9 @@ impl MessageLruCache {
         self.messages.len()
     }
 
-    pub fn get_deepest_ns(&mut self, name: &Name) -> Option<Name> {
-        let key = &EntryKey(name as *const Name, RRType::NS);
-        if self.rrset_cache.has_rrset(key) {
-            return Some(name.clone());
+    pub fn get_deepest_ns(&mut self, name: &Name) -> Option<RRset> {
+        if let Some(ns) = self.rrset_cache.get_rrset(name, RRType::NS) {
+            return Some(ns)
         } else if let Ok(parent) = name.parent(1) {
             return self.get_deepest_ns(&parent);
         } else {
@@ -145,6 +144,6 @@ mod tests {
 
         let deepest_ns = cache.get_deepest_ns(&Name::new("a.b.c.example.com.").unwrap());
         assert!(deepest_ns.is_some());
-        assert_eq!(deepest_ns.unwrap(), Name::new("example.com.").unwrap());
+        assert_eq!(deepest_ns.unwrap().name, Name::new("example.com.").unwrap());
     }
 }

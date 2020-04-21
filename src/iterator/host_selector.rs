@@ -64,9 +64,9 @@ impl HostState {
     }
 
     fn calculate_rtt(last: Duration, now: Duration) -> Duration {
-        last.checked_mul(3)
+        last.checked_mul(7)
             .unwrap()
-            .checked_add(now.checked_mul(7).unwrap())
+            .checked_add(now.checked_mul(3).unwrap())
             .unwrap()
             .checked_div(10)
             .unwrap()
@@ -157,7 +157,7 @@ mod tests {
         selector.set_rtt(host1, Duration::from_secs(10));
         selector.set_rtt(host2, Duration::from_secs(11));
         assert_eq!(selector.select(vec![host1, host2].as_ref()).unwrap(), host1);
-        selector.set_rtt(host1, Duration::from_secs(12));
+        selector.set_rtt(host1, Duration::from_secs(14));
         assert_eq!(selector.select(vec![host1, host2].as_ref()).unwrap(), host2);
     }
 }
