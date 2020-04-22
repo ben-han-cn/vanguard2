@@ -41,6 +41,10 @@ impl MessageCache {
         }
     }
 
+    pub fn gen_cname_response(&mut self, request: &Message) -> Option<Message> {
+        self.positive_cache.gen_cname_response(request)
+    }
+
     pub fn add_response(&mut self, response: Message) {
         if response.header.an_count > 0 {
             self.positive_cache.add_response(response);

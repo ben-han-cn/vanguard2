@@ -3,8 +3,8 @@ use std::net::IpAddr;
 
 use r53::{Message, Name, RData, RRType, RRset, SectionType};
 
+use super::cache::MessageCache;
 use super::host_selector::{Host, HostSelector};
-use crate::cache::MessageCache;
 
 #[derive(Debug, Clone)]
 pub struct DelegationPoint {

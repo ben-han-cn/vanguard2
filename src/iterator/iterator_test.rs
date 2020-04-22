@@ -7,11 +7,11 @@ use std::{
     time::Duration,
 };
 
+use super::cache::MessageCache;
 use super::forwarder::ForwarderManager;
 use super::host_selector::{Host, HostSelector, RTTBasedHostSelector};
 use super::iterator::Iterator;
 use super::nsclient::NameServerClient;
-use crate::cache::MessageCache;
 use crate::config::{VanguardConfig, ZoneForwarderConfig};
 use crate::types::Request;
 use anyhow::{self, bail};

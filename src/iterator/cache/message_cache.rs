@@ -26,7 +26,7 @@ impl MessageLruCache {
 
     pub fn get_deepest_ns(&mut self, name: &Name) -> Option<RRset> {
         if let Some(ns) = self.rrset_cache.get_rrset(name, RRType::NS) {
-            return Some(ns)
+            return Some(ns);
         } else if let Ok(parent) = name.parent(1) {
             return self.get_deepest_ns(&parent);
         } else {
@@ -44,8 +44,12 @@ impl MessageLruCache {
             }
             response
         } else {
-            self.rrset_cache.gen_response(key, request)
+            self.rrset_cache.gen_response(request)
         }
+    }
+
+    pub fn gen_cname_response(&mut self, request: &Message) -> Option<Message> {
+        self.rrset_cache.gen_cname_response(request)
     }
 
     pub fn add_response(&mut self, message: Message) {

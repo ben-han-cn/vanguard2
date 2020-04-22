@@ -32,10 +32,12 @@ impl RRsetLruCache {
         }
     }
 
-    pub fn gen_response(&mut self, key: &EntryKey, req: &Message) -> Option<Message> {
+    pub fn gen_response(&mut self, request: &Message) -> Option<Message> {
+        let question = request.question.as_ref().unwrap();
+        let key = &EntryKey(&question.name as *const Name, question.typ);
         match self.get_rrset_with_key(key) {
             Some(rrset) => {
-                let mut response = req.clone();
+                let mut response = request.clone();
                 let mut builder = MessageBuilder::new(&mut response);
                 builder
                     .make_response()
@@ -60,6 +62,36 @@ impl RRsetLruCache {
                 Some(response)
             }
             None => None,
+        }
+    }
+
+    pub fn gen_cname_response(&mut self, request: &Message) -> Option<Message> {
+        let name = &request.question.as_ref().unwrap().name;
+        let mut answers = Vec::new();
+        self.chase_cname_chain(name, &mut answers);
+        if !answers.is_empty() {
+            answers.reverse();
+            let mut response = request.clone();
+            let mut builder = MessageBuilder::new(&mut response);
+            builder
+                .make_response()
+                .set_flag(HeaderFlag::RecursionAvailable);
+            for answer in answers {
+                builder.add_rrset(SectionType::Answer, answer);
+            }
+            builder.done();
+            Some(response)
+        } else {
+            None
+        }
+    }
+
+    fn chase_cname_chain(&mut self, name: &Name, answers: &mut Vec<RRset>) {
+        if let Some(cname) = self.get_rrset(name, RRType::CNAME) {
+            if let RData::CName(ref next) = cname.rdatas[0] {
+                self.chase_cname_chain(&next.name, answers);
+                answers.push(cname)
+            }
         }
     }
 

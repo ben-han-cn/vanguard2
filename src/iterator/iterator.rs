@@ -7,14 +7,14 @@ use anyhow;
 use r53::{name::root, Message, MessageBuilder, RData, RRType, Rcode, SectionType};
 
 use super::aggregate_client::AggregateClient;
+use super::cache::MessageCache;
 use super::delegation_point::DelegationPoint;
 use super::forwarder::ForwarderManager;
 use super::host_selector::{Host, RTTBasedHostSelector};
 use super::iter_event::{IterEvent, QueryState};
-use super::message_helper::{sanitize_and_classify_response, ResponseCategory};
 use super::nsclient::{NSClient, NameServerClient};
 use super::roothint::RootHint;
-use crate::cache::MessageCache;
+use super::util::{sanitize_and_classify_response, ResponseCategory};
 use crate::config::VanguardConfig;
 use crate::types::{Request, Response};
 
@@ -30,7 +30,6 @@ pub fn new_iterator(conf: &VanguardConfig) -> Iterator<AggregateClient<NSClient>
     let cache = Arc::new(Mutex::new(MessageCache::new(DEFAULT_MESSAGE_CACHE_SIZE)));
     let client = NSClient::new(host_selector.clone());
     let forwarder = Arc::new(ForwarderManager::new(&conf.forwarder));
-    //Iterator::new(cache, host_selector, forwarder, client)
     Iterator::new(
         cache,
         host_selector,
@@ -125,6 +124,10 @@ impl<C: NameServerClient + 'static> Iterator<C> {
             event.set_response(response, ResponseCategory::Answer);
             event.next_state(event.get_final_state());
             event.cache_hit = true;
+            true
+        } else if let Some(response) = cache.gen_cname_response(&event.get_request()) {
+            event.set_response(response, ResponseCategory::CName);
+            event.next_state(QueryState::QueryResponse);
             true
         } else {
             false
@@ -263,7 +266,8 @@ impl<C: NameServerClient + 'static> Iterator<C> {
             }
 
             ResponseCategory::CName => {
-                let next = match response.section(SectionType::Answer).unwrap()[0].rdatas[0] {
+                let answers = response.section(SectionType::Answer).unwrap();
+                let next = match answers[answers.len() - 1].rdatas[0] {
                     RData::CName(ref cname) => cname.name.clone(),
                     _ => unreachable!(),
                 };

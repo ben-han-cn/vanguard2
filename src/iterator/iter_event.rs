@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use super::delegation_point::DelegationPoint;
-use super::message_helper::ResponseCategory;
+use super::util::ResponseCategory;
 use crate::types::Response;
 use r53::{HeaderFlag, Message, MessageBuilder, RRset, Rcode, SectionType};
 
