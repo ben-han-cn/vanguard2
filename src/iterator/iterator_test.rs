@@ -232,6 +232,7 @@ fn test_iterator() {
         "glue_all_in_zone.yaml",
         "some_nameserver_offline.yaml",
         "glue_out_of_zone.yaml",
+        "glue_has_cname.yaml",
     ] {
         let mut testfile_path = testdir.clone();
         testfile_path.push(f);

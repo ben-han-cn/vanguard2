@@ -318,13 +318,22 @@ impl<C: NameServerClient + 'static> Iterator<C> {
 
         let (mut response, category) = event.take_response();
         if category == ResponseCategory::Answer {
-            if let Some(answers) = response.take_section(SectionType::Answer) {
-                if answers.len() == 1 {
-                    let answer = &answers[0];
-                    if answer.typ == RRType::A {
-                        dp.add_glue(answer);
-                        return base_event;
-                    }
+            if let Some(mut answers) = response.take_section(SectionType::Answer) {
+                let mut last_rrset = answers.pop().unwrap();
+                if event.query_restart_count > 0 {
+                    let original_name = event
+                        .get_original_request()
+                        .question
+                        .as_ref()
+                        .unwrap()
+                        .name
+                        .clone();
+                    warn!("glue {} has cname", original_name);
+                    last_rrset.name = original_name;
+                }
+
+                if last_rrset.typ == RRType::A && dp.add_glue(&last_rrset) {
+                    return base_event;
                 }
             }
         }

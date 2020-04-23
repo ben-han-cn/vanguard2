@@ -57,7 +57,9 @@ impl DelegationPoint {
             lame_host: Vec::new(),
         };
 
-        glues.iter().for_each(|glue| dp.add_glue(glue));
+        glues.iter().for_each(|glue| {
+            dp.add_glue(glue);
+        });
         dp
     }
 
@@ -78,7 +80,7 @@ impl DelegationPoint {
         &self.zone
     }
 
-    pub fn add_glue(&mut self, glue: &RRset) {
+    pub fn add_glue(&mut self, glue: &RRset) -> bool {
         if let Some(hosts_) = self.server_and_hosts.get_mut(&glue.name) {
             let mut hosts = glue
                 .rdatas
@@ -90,6 +92,9 @@ impl DelegationPoint {
                     hosts
                 });
             hosts_.append(&mut hosts);
+            true
+        } else {
+            false
         }
     }
 
@@ -151,7 +156,6 @@ mod tests {
 
     #[test]
     fn test_delegation_point_new() {
-        let zone = Name::new("com").unwrap();
         let ns1 = RRset::from_str("com. 3600  IN NS ns1.com").unwrap();
         let ns2 = RRset::from_str("com. 3600  IN NS ns2.com").unwrap();
         let ns = merge_rrset(ns1, ns2);
@@ -165,7 +169,6 @@ mod tests {
 
     #[test]
     fn test_missing_server() {
-        let zone = Name::new("com").unwrap();
         let ns1 = RRset::from_str("com. 3600  IN NS ns1.com").unwrap();
         let ns2 = RRset::from_str("com. 3600  IN NS ns2.com").unwrap();
         let ns = merge_rrset(ns1, ns2);
@@ -173,7 +176,6 @@ mod tests {
         let dp = DelegationPoint::from_ns_rrset(&ns, &vec![glue1]);
         assert!(dp.get_missing_server().is_none());
 
-        let zone = Name::new("com").unwrap();
         let ns1 = RRset::from_str("com. 3600  IN NS ns1.com").unwrap();
         let ns2 = RRset::from_str("com. 3600  IN NS ns2.cn").unwrap();
         let ns = merge_rrset(ns1, ns2);
@@ -199,7 +201,6 @@ mod tests {
 
     #[test]
     fn test_select_target() {
-        let zone = Name::new("com").unwrap();
         let ns = RRset::from_str("com. 3600  IN NS ns1.com").unwrap();
 
         let glue1 = RRset::from_str("ns1.com. 3600  IN A 2.2.2.2").unwrap();
@@ -211,7 +212,6 @@ mod tests {
         let host = dp.get_target(&DumbSelector).unwrap();
         assert_eq!(host.to_string(), "2.2.2.2");
 
-        let zone = Name::new("com").unwrap();
         let mut dp = DelegationPoint::from_ns_rrset(&ns, &Vec::new());
         let host = dp.get_target(&DumbSelector);
         assert!(host.is_none());

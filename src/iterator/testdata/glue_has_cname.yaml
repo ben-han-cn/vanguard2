@@ -1,0 +1,73 @@
+qname: www.dnstool.net.
+qtype: A
+servers:
+- ip: 1.1.1.1
+  zone: .
+  qname: www.dnstool.net.
+  qtype: A
+  response:
+    authority:
+    - "net. 3600 IN NS a.dns.net."
+    additional:
+    - "a.dns.net 3600 IN A 2.2.2.2"
+
+- ip: 1.1.1.1
+  zone: .
+  qname: dns3.dnstool.com.
+  qtype: A
+  response:
+    authority:
+    - "dnstool.com. 3600 IN NS a.dnstool.com."
+    additional:
+    - "a.dnstool.com. 3600 IN A 4.4.4.4"
+
+- ip: 2.2.2.2
+  zone: net
+  qname: www.dnstool.net.
+  qtype: A
+  response:
+    authority:
+    - "dnstool.net.		86400	IN	NS	dns3.dnstool.com"
+
+- ip: 2.2.2.2
+  zone: cn
+  qname: ns1.people.cn.
+  qtype: A
+  response:
+    authority:
+    - "people.cn.		86400	IN	NS	ns1.people.cn"
+    additional:
+    - "ns1.people.cn.		86400	IN	A	3.3.3.3"
+
+- ip: 4.4.4.4
+  zone: dnstool.com
+  qname: dns3.dnstool.com. 
+  qtype: A
+  response:
+    answer:
+    - "dns3.dnstool.com 3600 IN CNAME dns4.dnstool.com"
+    - "dns4.dnstool.com 3600 IN A 5.5.5.5"
+
+- ip: 4.4.4.4
+  zone: dnstool.com
+  qname: dns4.dnstool.com. 
+  qtype: A
+  response:
+    answer:
+    - "dns4.dnstool.com 3600 IN A 5.5.5.5"
+
+- ip: 5.5.5.5
+  zone: dnstool.net
+  qname: www.dnstool.net.
+  qtype: A
+  response:
+    answer:
+    - "www.dnstool.net. 3600 IN A 111.111.111.111"
+    authority:
+    - "dnstool.net 86400	IN	NS	dns3.dnstool.com"
+
+response:
+  answer:
+  - "www.dnstool.net. 3600 IN A 111.111.111.111"
+  authority:
+  - "dnstool.net 86400	IN	NS	dns3.dnstool.com"
