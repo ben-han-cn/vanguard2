@@ -36,11 +36,9 @@ impl NSClient {
         let mut render = MessageRender::new();
         request.to_wire(&mut render);
         let mut socket = UdpSocket::bind(&("0.0.0.0:0".parse::<SocketAddr>().unwrap())).await?;
+        socket.connect(SocketAddr::new(target, 53)).await?;
         let send_time = Instant::now();
-        if let Err(e) = socket
-            .send_to(&render.take_data(), SocketAddr::new(target, 53))
-            .await
-        {
+        if let Err(e) = socket.send(&render.take_data()).await {
             self.host_selector
                 .lock()
                 .unwrap()
