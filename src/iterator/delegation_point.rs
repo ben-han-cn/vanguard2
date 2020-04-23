@@ -65,15 +65,31 @@ impl DelegationPoint {
 
     pub fn from_cache(qname: &Name, cache: &mut MessageCache) -> Option<Self> {
         let ns = cache.get_deepest_ns(qname)?;
+        let mut all_glue_is_under_zone = true;
         let glues = ns.rdatas.iter().fold(Vec::new(), |mut glues, rdata| {
-            if let RData::NS(ref ns) = rdata {
-                if let Some(rrset) = cache.get_rrset(&ns.name, RRType::A) {
+            if let RData::NS(ref glue) = rdata {
+                if !glue.name.is_subdomain(&ns.name) {
+                    all_glue_is_under_zone = false;
+                }
+                if let Some(rrset) = cache.get_rrset(&glue.name, RRType::A) {
                     glues.push(rrset);
                 }
+            } else {
+                unreachable!();
             }
             glues
         });
-        Some(DelegationPoint::from_ns_rrset(&ns, &glues))
+
+        //avoid return a dp, whose glue is empty, but all glue is under the zone
+        //in this case, the dp will cause endloop
+        if !glues.is_empty() || !all_glue_is_under_zone {
+            Some(DelegationPoint::from_ns_rrset(&ns, &glues))
+        } else {
+            match qname.parent(1) {
+                Ok(parent) => DelegationPoint::from_cache(&parent, cache),
+                Err(_) => None,
+            }
+        }
     }
 
     pub fn zone(&self) -> &Name {
