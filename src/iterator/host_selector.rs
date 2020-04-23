@@ -143,7 +143,7 @@ impl HostSelector for RTTBasedHostSelector {
 
 #[cfg(test)]
 mod tests {
-    use super::{Host, HostSelector, RTTBasedHostSelector};
+    use super::{HostSelector, RTTBasedHostSelector};
     use std::{
         net::{IpAddr, Ipv4Addr},
         time::Duration,

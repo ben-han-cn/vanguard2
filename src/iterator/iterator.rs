@@ -320,14 +320,16 @@ impl<C: NameServerClient + 'static> Iterator<C> {
         if category == ResponseCategory::Answer {
             if let Some(mut answers) = response.take_section(SectionType::Answer) {
                 let mut last_rrset = answers.pop().unwrap();
-                if event.query_restart_count > 0 {
-                    let original_name = event
-                        .get_original_request()
-                        .question
-                        .as_ref()
-                        .unwrap()
-                        .name
-                        .clone();
+                //in caes crruent response has cname
+                //glue has out of zone canme
+                let original_name = event
+                    .get_original_request()
+                    .question
+                    .as_ref()
+                    .unwrap()
+                    .name
+                    .clone();
+                if last_rrset.name != original_name {
                     warn!("glue {} has cname", original_name);
                     last_rrset.name = original_name;
                 }

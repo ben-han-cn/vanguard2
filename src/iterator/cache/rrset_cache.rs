@@ -15,10 +15,6 @@ impl RRsetLruCache {
         }
     }
 
-    pub fn has_rrset(&self, key: &EntryKey) -> bool {
-        self.rrsets.contains(key)
-    }
-
     pub fn get_rrset_with_key(&mut self, key: &EntryKey) -> Option<RRset> {
         match self.rrsets.get(key) {
             Some(entry) => {

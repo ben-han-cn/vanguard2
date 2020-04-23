@@ -1,5 +1,7 @@
 use anyhow::{self, bail};
-use r53::{header_flag::HeaderFlag, opcode, Message, Name, RRType, Rcode, SectionType};
+use r53::{
+    header_flag::HeaderFlag, opcode, Message, Name, RData, RRType, RRset, Rcode, SectionType,
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ResponseCategory {
@@ -44,30 +46,20 @@ pub fn sanitize_and_classify_response(
         _ => ResponseCategory::FormErr,
     };
 
-    let rcode = resp.header.rcode;
-    if let Some(rrsets) = resp.section_mut(SectionType::Answer) {
-        if rcode != Rcode::NoError {
-            bail!("only noerror rcode should have answer");
-        }
-        has_answer = true;
-
-        if rrsets.len() != 1 {
-            if rrsets[0].typ != RRType::CNAME {
-                bail!("only cname may contain a chain which may has more than one rrset");
-            } else {
-                //only keep the first level name
-                rrsets.truncate(1);
-            }
-        } else {
-            if rrsets[0].typ != typ && rrsets[0].typ != RRType::CNAME {
+    if let Some(mut rrsets) = resp.section_mut(SectionType::Answer) {
+        rrsets.retain(|rrset| rrset.name.is_subdomain(zone));
+        if !rrsets.is_empty() {
+            if &rrsets[0].name != name || (rrsets[0].typ != typ && rrsets[0].typ != RRType::CNAME) {
                 bail!("answer doesn't match query");
             }
-        }
 
-        if typ != RRType::CNAME && rrsets[0].typ == RRType::CNAME {
-            response_category = ResponseCategory::CName;
-        } else {
-            response_category = ResponseCategory::Answer;
+            has_answer = true;
+            //should be cname chain
+            if sanitize_cname_chain(typ, &mut rrsets) {
+                response_category = ResponseCategory::Answer;
+            } else {
+                response_category = ResponseCategory::CName;
+            }
         }
     }
 
@@ -82,6 +74,7 @@ pub fn sanitize_and_classify_response(
         resp.take_section(SectionType::Authority);
     }
 
+    let rcode = resp.header.rcode;
     if let Some(rrsets) = resp.section_mut(SectionType::Authority) {
         if rrsets.len() > 1 {
             bail!("auth section should has more than one rrset");
@@ -134,10 +127,45 @@ pub fn sanitize_and_classify_response(
     Ok(response_category)
 }
 
+fn sanitize_cname_chain(qtype: RRType, rrsets: &mut Vec<RRset>) -> bool {
+    let mut last_name = &rrsets[0].name;
+    let mut has_answer = false;
+    let mut last_valid_rrset_index = 0;
+    for (i, rrset) in rrsets.iter().enumerate() {
+        if &rrset.name != last_name {
+            break;
+        }
+
+        if rrset.typ != RRType::CNAME {
+            if rrset.typ == qtype {
+                has_answer = true;
+                last_valid_rrset_index = i;
+            }
+            break;
+        }
+
+        if rrset.rdatas.len() != 1 {
+            break;
+        }
+
+        if let RData::CName(ref cname) = rrset.rdatas[0] {
+            last_name = &cname.name;
+        } else {
+            unreachable!();
+        }
+
+        last_valid_rrset_index = i;
+    }
+
+    rrsets.truncate(last_valid_rrset_index + 1);
+    return has_answer;
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     use r53::util::hex::from_hex;
+    use std::str::FromStr;
 
     struct TestCase {
         raw: &'static str,
@@ -186,5 +214,52 @@ mod test {
             let mut message = Message::from_wire(raw.unwrap().as_ref()).unwrap();
             assert_eq!(sanitize_and_classify_response(&case.zone, &case.qname, case.qtype, &mut message).unwrap(), case.category,);
         }
+    }
+
+    #[test]
+    fn test_sanitize_cname_chain() {
+        let rrset_strs = vec![
+            "a.com.     3600    IN      CNAME   b.com",
+            "b.com.     3600    IN      CNAME   c.com",
+            "d.com.     3600    IN      CNAME   c.com",
+            "c.com.     3600    IN      CNAME   d.com",
+        ];
+        let mut rrsets = rrset_strs.iter().fold(Vec::new(), |mut rrsets, s| {
+            rrsets.push(RRset::from_str(*s).unwrap());
+            rrsets
+        });
+
+        let has_answer = sanitize_cname_chain(RRType::A, &mut rrsets);
+        assert!(!has_answer);
+        assert_eq!(rrsets.len(), 2);
+
+        let rrset_strs = vec![
+            "a.com.     3600    IN      CNAME   b.com",
+            "b.com.     3600    IN      CNAME   c.com",
+            "c.com.     3600    IN      A 2.2.2.2",
+            "c.com.     3600    IN      A 3.3.3.3",
+            "e.com.     3600    IN      A 3.3.3.3",
+        ];
+        let mut rrsets = rrset_strs.iter().fold(Vec::new(), |mut rrsets, s| {
+            rrsets.push(RRset::from_str(*s).unwrap());
+            rrsets
+        });
+
+        let has_answer = sanitize_cname_chain(RRType::A, &mut rrsets);
+        assert!(has_answer);
+        assert_eq!(rrsets.len(), 3);
+
+        let rrset_strs = vec![
+            "c.com.     3600    IN      A 2.2.2.2",
+            "c.com.     3600    IN      A 3.3.3.3",
+        ];
+        let mut rrsets = rrset_strs.iter().fold(Vec::new(), |mut rrsets, s| {
+            rrsets.push(RRset::from_str(*s).unwrap());
+            rrsets
+        });
+
+        let has_answer = sanitize_cname_chain(RRType::A, &mut rrsets);
+        assert!(has_answer);
+        assert_eq!(rrsets.len(), 1);
     }
 }

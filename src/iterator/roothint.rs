@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use r53::{name::root, RRset};
+use r53::RRset;
 
 use super::delegation_point::DelegationPoint;
 
