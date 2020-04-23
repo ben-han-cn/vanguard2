@@ -187,63 +187,48 @@ fn add_rrset_in_section(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use r53::{edns::Edns, Rcode};
-    use std::str::FromStr;
+    use r53::{build_response, Rcode};
 
     fn build_positive_response() -> Message {
-        let mut msg = Message::with_query(Name::new("test.example.com.").unwrap(), RRType::A);
-        {
-            let mut builder = MessageBuilder::new(&mut msg);
-            builder
-                .id(1200)
-                .rcode(Rcode::NoError)
-                .set_flag(HeaderFlag::RecursionDesired)
-                .add_rrset(
-                    SectionType::Answer,
-                    RRset::from_str("test.example.com. 3600 IN A 192.0.2.2").unwrap(),
-                )
-                .add_rrset(
-                    SectionType::Answer,
-                    RRset::from_str("test.example.com. 3600 IN A 192.0.2.1").unwrap(),
-                )
-                .add_rrset(
-                    SectionType::Authority,
-                    RRset::from_str("example.com. 10 IN NS ns1.example.com.").unwrap(),
-                )
-                .add_rrset(
-                    SectionType::Additional,
-                    RRset::from_str("ns1.example.com. 3600 IN A 2.2.2.2").unwrap(),
-                )
-                .edns(Edns {
-                    versoin: 0,
-                    extened_rcode: 0,
-                    udp_size: 4096,
-                    dnssec_aware: false,
-                    options: None,
-                })
-                .done();
-        }
+        let mut msg = build_response(
+            "test.example.com.",
+            RRType::A,
+            vec![vec![
+                "test.example.com. 3600 IN A 192.0.2.2",
+                "test.example.com. 3600 IN A 192.0.2.1",
+            ]],
+            vec![vec!["example.com. 10 IN NS ns1.example.com."]],
+            vec![vec!["ns1.example.com. 3600 IN A 2.2.2.2"]],
+            Some(4096),
+        )
+        .unwrap();
+
+        let mut builder = MessageBuilder::new(&mut msg);
+        builder
+            .id(1200)
+            .rcode(Rcode::NoError)
+            .set_flag(HeaderFlag::RecursionDesired)
+            .done();
         msg
     }
 
     fn build_negative_response() -> Message {
-        let mut msg = Message::with_query(Name::new("test.example.com.").unwrap(), RRType::A);
-        {
-            let mut builder = MessageBuilder::new(&mut msg);
-            builder
-                .id(1200)
-                .rcode(Rcode::NXDomain)
-                .set_flag(HeaderFlag::RecursionDesired)
-                .add_rrset(SectionType::Authority, RRset::from_str("example.com. 30 IN SOA a.gtld-servers.net. nstld.verisign-grs.com. 1563935574 1800 900 604800 86400").unwrap())
-                .edns(Edns {
-                    versoin: 0,
-                    extened_rcode: 0,
-                    udp_size: 4096,
-                    dnssec_aware: false,
-                    options: None,
-                })
-                .done();
-        }
+        let mut msg = build_response(
+            "test.example.com.",
+            RRType::A,
+            vec![],
+            vec![vec!["example.com. 30 IN SOA a.gtld-servers.net. nstld.verisign-grs.com. 1563935574 1800 900 604800 86400"]],
+            vec![],
+            Some(4096),
+        )
+        .unwrap();
+
+        let mut builder = MessageBuilder::new(&mut msg);
+        builder
+            .id(1200)
+            .rcode(Rcode::NXDomain)
+            .set_flag(HeaderFlag::RecursionDesired)
+            .done();
         msg
     }
     #[test]

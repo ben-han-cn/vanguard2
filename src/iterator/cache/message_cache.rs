@@ -79,42 +79,27 @@ impl MessageLruCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use r53::{edns::Edns, header_flag, MessageBuilder, RRType, RRset, Rcode, SectionType};
-    use std::str::FromStr;
+    use r53::{build_response, header_flag, MessageBuilder, RRType, Rcode, SectionType};
 
     fn build_positive_response() -> Message {
-        let mut msg = Message::with_query(Name::new("test.example.com.").unwrap(), RRType::A);
-        {
-            let mut builder = MessageBuilder::new(&mut msg);
-            builder
-                .id(1200)
-                .rcode(Rcode::NoError)
-                .set_flag(header_flag::HeaderFlag::RecursionDesired)
-                .add_rrset(
-                    SectionType::Answer,
-                    RRset::from_str("test.example.com. 3600 IN A 192.0.2.2").unwrap(),
-                )
-                .add_rrset(
-                    SectionType::Answer,
-                    RRset::from_str("test.example.com. 3600 IN A 192.0.2.1").unwrap(),
-                )
-                .add_rrset(
-                    SectionType::Authority,
-                    RRset::from_str("example.com. 100 IN NS ns1.example.com.").unwrap(),
-                )
-                .add_rrset(
-                    SectionType::Additional,
-                    RRset::from_str("ns1.example.com. 3600 IN A 2.2.2.2").unwrap(),
-                )
-                .edns(Edns {
-                    versoin: 0,
-                    extened_rcode: 0,
-                    udp_size: 4096,
-                    dnssec_aware: false,
-                    options: None,
-                })
-                .done();
-        }
+        let mut msg = build_response(
+            "test.example.com.",
+            RRType::A,
+            vec![vec![
+                "test.example.com. 3600 IN A 192.0.2.2",
+                "test.example.com. 3600 IN A 192.0.2.1",
+            ]],
+            vec![vec!["example.com. 100 IN NS ns1.example.com."]],
+            vec![vec!["ns1.example.com. 3600 IN A 2.2.2.2"]],
+            Some(4096),
+        )
+        .unwrap();
+        let mut builder = MessageBuilder::new(&mut msg);
+        builder
+            .id(1200)
+            .rcode(Rcode::NoError)
+            .set_flag(header_flag::HeaderFlag::RecursionDesired)
+            .done();
         msg
     }
 

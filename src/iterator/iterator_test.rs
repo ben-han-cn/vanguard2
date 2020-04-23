@@ -16,7 +16,7 @@ use crate::config::{VanguardConfig, ZoneForwarderConfig};
 use crate::types::Request;
 use anyhow::{self, bail};
 use async_trait::async_trait;
-use r53::{name::root, Message, MessageBuilder, Name, RRType, RRset, SectionType};
+use r53::{build_response, name::root, Message, MessageBuilder, Name, RRType, RRset, SectionType};
 use serde::Deserialize;
 use std::{fs::File, io::prelude::*, path::PathBuf};
 use tokio::runtime::Runtime;
@@ -90,31 +90,6 @@ impl NameServerClient for DumbClient {
     }
 }
 
-fn gen_response(
-    name: Name,
-    typ: RRType,
-    answers: Vec<RRset>,
-    auths: Vec<RRset>,
-    additionals: Vec<RRset>,
-) -> Message {
-    let mut response = Message::with_query(name, typ);
-    let mut builder = MessageBuilder::new(&mut response);
-    for answer in answers {
-        builder.add_rrset(SectionType::Answer, answer);
-    }
-
-    for auth in auths {
-        builder.add_rrset(SectionType::Authority, auth);
-    }
-
-    for additional in additionals {
-        builder.add_rrset(SectionType::Additional, additional);
-    }
-    builder.make_response();
-    builder.done();
-    response
-}
-
 fn message_body_eq(m1: &Message, m2: &Message) {
     assert_eq!(
         m1.section(SectionType::Answer),
@@ -155,26 +130,28 @@ struct Response {
 }
 
 impl Response {
-    pub fn to_message(self, qname: &Name, qtype: RRType) -> Message {
-        gen_response(
-            qname.clone(),
+    pub fn to_message(self, qname: &str, qtype: RRType) -> Message {
+        build_response(
+            qname,
             qtype,
             self.answer
                 .unwrap_or(vec![])
                 .iter()
-                .map(|s| RRset::from_str(s).unwrap())
-                .collect::<Vec<RRset>>(),
+                .map(|s| vec![s.as_ref()])
+                .collect::<Vec<Vec<&str>>>(),
             self.authority
                 .unwrap_or(vec![])
                 .iter()
-                .map(|s| RRset::from_str(s).unwrap())
-                .collect::<Vec<RRset>>(),
+                .map(|s| vec![s.as_ref()])
+                .collect::<Vec<Vec<&str>>>(),
             self.additional
                 .unwrap_or(vec![])
                 .iter()
-                .map(|s| RRset::from_str(s).unwrap())
-                .collect::<Vec<RRset>>(),
+                .map(|s| vec![s.as_ref()])
+                .collect::<Vec<Vec<&str>>>(),
+            None,
         )
+        .unwrap()
     }
 }
 
@@ -183,13 +160,17 @@ fn run_testcase(conf: &VanguardConfig, case: TestCase) {
     let mut client = DumbClient::new(host_selector.clone());
     let mut cache = MessageCache::new(100000);
     //as a replacement for root hint
-    cache.add_response(gen_response(
-        root(),
-        RRType::NS,
-        vec![RRset::from_str(". 3600 IN NS a.root.").unwrap()],
-        vec![],
-        vec![RRset::from_str("a.root. 3600 IN A 1.1.1.1").unwrap()],
-    ));
+    cache.add_response(
+        build_response(
+            ".",
+            RRType::NS,
+            vec![vec![". 3600 IN NS a.root."]],
+            vec![],
+            vec![vec!["a.root. 3600 IN A 1.1.1.1"]],
+            None,
+        )
+        .unwrap(),
+    );
 
     for server in case.servers {
         let qname = Name::new(server.qname.as_ref()).unwrap();
@@ -198,7 +179,7 @@ fn run_testcase(conf: &VanguardConfig, case: TestCase) {
             IpAddr::from_str(server.ip.as_ref()).unwrap(),
             &qname,
             qtype,
-            server.response.to_message(&qname, qtype),
+            server.response.to_message(server.qname.as_ref(), qtype),
         );
     }
 
@@ -218,7 +199,7 @@ fn run_testcase(conf: &VanguardConfig, case: TestCase) {
         SocketAddr::from_str("127.0.0.1:6666").unwrap(),
     );
     let response = rt.block_on(iterator.resolve(request)).unwrap();
-    let desired_response = case.response.to_message(&qname, qtype);
+    let desired_response = case.response.to_message(case.qname.as_ref(), qtype);
     message_body_eq(&response.response, &desired_response);
 }
 

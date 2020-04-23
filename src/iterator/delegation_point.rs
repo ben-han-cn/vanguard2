@@ -85,7 +85,7 @@ impl DelegationPoint {
         if !glues.is_empty() || !all_glue_is_under_zone {
             Some(DelegationPoint::from_ns_rrset(&ns, &glues))
         } else {
-            match qname.parent(1) {
+            match ns.name.parent(1) {
                 Ok(parent) => DelegationPoint::from_cache(&parent, cache),
                 Err(_) => None,
             }
@@ -158,24 +158,17 @@ impl DelegationPoint {
 
 #[cfg(test)]
 mod tests {
+    use super::super::cache::MessageCache;
     use super::super::host_selector::{Host, HostSelector};
     use super::DelegationPoint;
-    use r53::{Name, RRset};
+    use r53::{build_response, Name, RRType, RRset};
     use std::str::FromStr;
     use std::time::Duration;
 
-    fn merge_rrset(mut rrset1: RRset, mut rrset2: RRset) -> RRset {
-        assert!(rrset1.is_same_rrset(&rrset2));
-        rrset1.rdatas.append(&mut rrset2.rdatas);
-        rrset1
-    }
-
     #[test]
     fn test_delegation_point_new() {
-        let ns1 = RRset::from_str("com. 3600  IN NS ns1.com").unwrap();
-        let ns2 = RRset::from_str("com. 3600  IN NS ns2.com").unwrap();
-        let ns = merge_rrset(ns1, ns2);
-
+        let ns =
+            RRset::from_strs(&["com. 3600  IN NS ns1.com", "com. 3600  IN NS ns2.com"]).unwrap();
         let glue1 = RRset::from_str("ns1.com. 3600  IN A 1.1.1.1").unwrap();
         let glue2 = RRset::from_str("ns2.com. 3600  IN A 2.2.2.2").unwrap();
 
@@ -184,17 +177,81 @@ mod tests {
     }
 
     #[test]
+    fn test_delegation_point_from_cache() {
+        let mut cache = MessageCache::new(100000);
+        //as a replacement for root hint
+        cache.add_response(
+            build_response(
+                "www.example.cn",
+                RRType::A,
+                vec![vec!["www.example.cn 3600 IN A 2.2.2.2"]],
+                vec![vec!["example.cn 3600 IN NS a.example.cn."]],
+                vec![],
+                None,
+            )
+            .unwrap(),
+        );
+        cache.add_response(
+            build_response(
+                "www.example.com",
+                RRType::A,
+                vec![vec!["www.example.com 3600 IN A 2.2.2.2"]],
+                vec![vec!["example.com 3600 IN NS a.example.com."]],
+                vec![vec!["a.example.com 3600 IN A 3.3.3.3"]],
+                None,
+            )
+            .unwrap(),
+        );
+        cache.add_response(
+            build_response(
+                "www.example.net",
+                RRType::A,
+                vec![vec!["www.example.net 3600 IN A 2.2.2.2"]],
+                vec![vec![
+                    "example.net 3600 IN NS a.example.net.",
+                    "example.net 3600 IN NS a.example.org.",
+                ]],
+                vec![],
+                None,
+            )
+            .unwrap(),
+        );
+        cache.add_response(
+            build_response(
+                "cn",
+                RRType::NS,
+                vec![vec!["cn 3600 IN NS a.cn", "cn 3600 IN NS b.cn"]],
+                vec![],
+                vec![vec!["a.cn 3600 IN A 3.3.3.3"]],
+                None,
+            )
+            .unwrap(),
+        );
+
+        let dp =
+            DelegationPoint::from_cache(&Name::new("xxx.example.cn").unwrap(), &mut cache).unwrap();
+        assert_eq!(dp.zone(), &Name::new("cn").unwrap());
+
+        let dp = DelegationPoint::from_cache(&Name::new("xxx.example.com").unwrap(), &mut cache)
+            .unwrap();
+        assert_eq!(dp.zone(), &Name::new("example.com").unwrap());
+
+        let dp = DelegationPoint::from_cache(&Name::new("xxx.example.net").unwrap(), &mut cache)
+            .unwrap();
+        assert_eq!(dp.zone(), &Name::new("example.net").unwrap());
+        assert!(!dp.get_missing_server().is_none());
+    }
+
+    #[test]
     fn test_missing_server() {
-        let ns1 = RRset::from_str("com. 3600  IN NS ns1.com").unwrap();
-        let ns2 = RRset::from_str("com. 3600  IN NS ns2.com").unwrap();
-        let ns = merge_rrset(ns1, ns2);
+        let ns =
+            RRset::from_strs(&["com. 3600  IN NS ns1.com", "com. 3600  IN NS ns2.com"]).unwrap();
         let glue1 = RRset::from_str("ns1.com. 3600  IN A 1.1.1.1").unwrap();
         let dp = DelegationPoint::from_ns_rrset(&ns, &vec![glue1]);
         assert!(dp.get_missing_server().is_none());
 
-        let ns1 = RRset::from_str("com. 3600  IN NS ns1.com").unwrap();
-        let ns2 = RRset::from_str("com. 3600  IN NS ns2.cn").unwrap();
-        let ns = merge_rrset(ns1, ns2);
+        let ns =
+            RRset::from_strs(&["com. 3600  IN NS ns1.com", "com. 3600  IN NS ns2.cn"]).unwrap();
         let glue1 = RRset::from_str("ns1.com. 3600  IN A 1.1.1.1").unwrap();
         let mut dp = DelegationPoint::from_ns_rrset(&ns, &vec![glue1]);
         assert_eq!(
@@ -219,10 +276,12 @@ mod tests {
     fn test_select_target() {
         let ns = RRset::from_str("com. 3600  IN NS ns1.com").unwrap();
 
-        let glue1 = RRset::from_str("ns1.com. 3600  IN A 2.2.2.2").unwrap();
-        let glue2 = RRset::from_str("ns1.com. 3600  IN A 1.1.1.1").unwrap();
-        let glue3 = RRset::from_str("ns1.com. 3600  IN A 3.3.3.3").unwrap();
-        let glue = merge_rrset(merge_rrset(glue1, glue2), glue3);
+        let glue = RRset::from_strs(&[
+            "ns1.com. 3600  IN A 2.2.2.2",
+            "ns1.com. 3600  IN A 1.1.1.1",
+            "ns1.com. 3600  IN A 3.3.3.3",
+        ])
+        .unwrap();
 
         let dp = DelegationPoint::from_ns_rrset(&ns, &vec![glue]);
         let host = dp.get_target(&DumbSelector).unwrap();
