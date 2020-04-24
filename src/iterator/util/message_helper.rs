@@ -9,9 +9,8 @@ pub enum ResponseCategory {
     CName,
     NXDomain,
     NXRRset,
-    ServFail,
     Referral,
-    FormErr,
+    ServerFail,
 }
 
 pub fn sanitize_and_classify_response(
@@ -37,15 +36,16 @@ pub fn sanitize_and_classify_response(
         bail!("question doesn't match");
     }
 
-    let is_auth_answer = resp.header.is_flag_set(HeaderFlag::AuthAnswer);
-    let mut has_answer = false;
     let mut response_category = match resp.header.rcode {
         Rcode::NoError => ResponseCategory::NXRRset,
-        Rcode::ServFail => ResponseCategory::ServFail,
         Rcode::NXDomain => ResponseCategory::NXDomain,
-        _ => ResponseCategory::FormErr,
+        //FormErr, Refused, ServerFail all mark the server unsuable
+        _ => {
+            return Ok(ResponseCategory::ServerFail);
+        }
     };
 
+    let mut has_answer = false;
     if let Some(mut rrsets) = resp.section_mut(SectionType::Answer) {
         rrsets.retain(|rrset| rrset.name.is_subdomain(zone));
         if !rrsets.is_empty() {
@@ -74,6 +74,7 @@ pub fn sanitize_and_classify_response(
         resp.take_section(SectionType::Authority);
     }
 
+    let is_auth_answer = resp.header.is_flag_set(HeaderFlag::AuthAnswer);
     let rcode = resp.header.rcode;
     if let Some(rrsets) = resp.section_mut(SectionType::Authority) {
         if rrsets.len() > 1 {

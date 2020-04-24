@@ -20,7 +20,7 @@ use crate::types::{Request, Response};
 
 const MAX_CNAME_REDIRECT_COUNT: u8 = 8;
 const MAX_DEPENDENT_QUERY_COUNT: u8 = 4;
-const MAX_REFERRAL_COUNT: u8 = 30;
+const MAX_REFERRAL_COUNT: u8 = 10;
 const MAX_ERROR_COUNT: u8 = 5;
 const ITERATOR_TIMEOUT: Duration = Duration::from_secs(10);
 const DEFAULT_MESSAGE_CACHE_SIZE: usize = 10240;
@@ -73,6 +73,11 @@ impl<C: NameServerClient + 'static> Iterator<C> {
     async fn do_resolve(mut self, req: Request) -> anyhow::Result<Response> {
         let mut event = IterEvent::new(req.request, QueryState::InitQuery, QueryState::Finished);
         loop {
+            debug!(
+                "event {:?} with query {}",
+                event.get_state(),
+                event.get_request().question.as_ref().unwrap()
+            );
             event = match event.get_state() {
                 QueryState::InitQuery => self.process_init_query(event),
                 QueryState::QueryTarget => self.process_query_target(event).await,
@@ -114,7 +119,7 @@ impl<C: NameServerClient + 'static> Iterator<C> {
             .make_response()
             .rcode(rcode)
             .done();
-        event.set_response(response, ResponseCategory::ServFail);
+        event.set_response(response, ResponseCategory::ServerFail);
         event.next_state(event.get_final_state())
     }
 
@@ -187,11 +192,8 @@ impl<C: NameServerClient + 'static> Iterator<C> {
                                 response,
                                 e
                             );
-                            event
-                                .get_mut_delegation_point()
-                                .expect("no dp set in query target state")
-                                .mark_server_lame(host);
-                            return event;
+
+                            ResponseCategory::ServerFail
                         }
                     };
 
@@ -207,7 +209,13 @@ impl<C: NameServerClient + 'static> Iterator<C> {
                                 .unwrap()
                                 .add_rrset_in_response(response.clone());
                         }
-                        _ => {}
+                        ResponseCategory::ServerFail => {
+                            event
+                                .get_mut_delegation_point()
+                                .expect("no dp set in query target state")
+                                .mark_server_lame(host);
+                            return event;
+                        }
                     }
                     event.set_response(response, response_category);
                     event.next_state(QueryState::QueryResponse);
