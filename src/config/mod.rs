@@ -2,6 +2,8 @@ use anyhow;
 use serde::{Deserialize, Serialize};
 use std::{fs::File, io::prelude::*, path::Path};
 
+const DEFAULT_MESSAGE_CACHE_SIZE: usize = 10240;
+
 #[derive(Default, Debug, Deserialize, Serialize)]
 pub struct VanguardConfig {
     #[serde(default)]
@@ -67,11 +69,17 @@ pub struct AuthZoneConfig {
 pub struct RecursorConfig {
     #[serde(default)]
     pub enable: bool,
+
+    #[serde(default)]
+    pub cache_size: usize,
 }
 
 impl Default for RecursorConfig {
     fn default() -> Self {
-        RecursorConfig { enable: true }
+        RecursorConfig {
+            enable: true,
+            cache_size: DEFAULT_MESSAGE_CACHE_SIZE,
+        }
     }
 }
 

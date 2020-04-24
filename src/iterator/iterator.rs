@@ -23,11 +23,10 @@ const MAX_DEPENDENT_QUERY_COUNT: u8 = 4;
 const MAX_REFERRAL_COUNT: u8 = 10;
 const MAX_ERROR_COUNT: u8 = 5;
 const ITERATOR_TIMEOUT: Duration = Duration::from_secs(10);
-const DEFAULT_MESSAGE_CACHE_SIZE: usize = 10240;
 
 pub fn new_iterator(conf: &VanguardConfig) -> Iterator<AggregateClient<NSClient>> {
     let host_selector = Arc::new(Mutex::new(RTTBasedHostSelector::new(10000)));
-    let cache = Arc::new(Mutex::new(MessageCache::new(DEFAULT_MESSAGE_CACHE_SIZE)));
+    let cache = Arc::new(Mutex::new(MessageCache::new(conf.recursor.cache_size)));
     let client = NSClient::new(host_selector.clone());
     let forwarder = Arc::new(ForwarderManager::new(&conf.forwarder));
     Iterator::new(
