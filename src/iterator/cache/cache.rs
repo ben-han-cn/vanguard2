@@ -6,12 +6,9 @@ pub enum RRsetTrustLevel {
     AdditionalWithoutAA,
     AuthorityWithoutAA,
     AdditionalWithAA,
-    NonAuthAnswerWithAA,
     AnswerWithoutAA,
-    PrimGlue,
     AuthorityWithAA,
     AnswerWithAA,
-    PrimNonGlue,
 }
 
 pub struct MessageCache {

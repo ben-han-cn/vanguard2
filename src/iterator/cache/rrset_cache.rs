@@ -122,7 +122,7 @@ mod tests {
 
         let rrset = RRset::from_str("www.zdns.cn 300 IN A 1.1.1.1").unwrap();
         assert!(cache.get_rrset(&rrset.name, rrset.typ).is_none());
-        cache.add_rrset(rrset.clone(), RRsetTrustLevel::NonAuthAnswerWithAA);
+        cache.add_rrset(rrset.clone(), RRsetTrustLevel::AnswerWithoutAA);
         let insert_rrset = cache.get_rrset(&rrset.name, rrset.typ).unwrap();
         assert_eq!(insert_rrset.rdatas, rrset.rdatas);
 
@@ -134,15 +134,15 @@ mod tests {
         let insert_rrset = cache.get_rrset(&rrset.name, rrset.typ).unwrap();
         assert_eq!(insert_rrset.rdatas, rrset.rdatas);
 
-        cache.add_rrset(low_trust_level_rrset.clone(), RRsetTrustLevel::PrimNonGlue);
+        cache.add_rrset(low_trust_level_rrset.clone(), RRsetTrustLevel::AnswerWithAA);
         let insert_rrset = cache.get_rrset(&rrset.name, rrset.typ).unwrap();
         assert_eq!(insert_rrset.rdatas, low_trust_level_rrset.rdatas);
         assert_eq!(cache.len(), 1);
 
         let rrset = RRset::from_str("www1.zdns.cn 300 IN A 1.1.1.1").unwrap();
-        cache.add_rrset(rrset.clone(), RRsetTrustLevel::NonAuthAnswerWithAA);
+        cache.add_rrset(rrset.clone(), RRsetTrustLevel::AnswerWithoutAA);
         let rrset = RRset::from_str("www2.zdns.cn 300 IN A 1.1.1.1").unwrap();
-        cache.add_rrset(rrset.clone(), RRsetTrustLevel::NonAuthAnswerWithAA);
+        cache.add_rrset(rrset.clone(), RRsetTrustLevel::AdditionalWithAA);
         assert_eq!(cache.len(), 2);
         assert!(cache
             .get_rrset(&Name::new("www.zdns.cn").unwrap(), RRType::A)
@@ -159,7 +159,7 @@ mod tests {
         for i in 0..1000 {
             let rrset = format!("www{}.zdns.cn 300 IN A 1.1.1.1", i);
             let rrset = RRset::from_str(rrset.as_ref()).unwrap();
-            cache.add_rrset(rrset.clone(), RRsetTrustLevel::NonAuthAnswerWithAA);
+            cache.add_rrset(rrset.clone(), RRsetTrustLevel::AnswerWithAA);
         }
         assert_eq!(cache.len(), 10);
 

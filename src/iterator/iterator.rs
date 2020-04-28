@@ -54,7 +54,7 @@ impl<C: NameServerClient + 'static> Iterator<C> {
         client: C,
     ) -> Self {
         Self {
-            cache: cache.clone(),
+            cache: cache,
             roothint: Arc::new(RootHint::new()),
             host_selector,
             forwarder,
