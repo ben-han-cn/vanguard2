@@ -86,7 +86,6 @@ impl MessageEntry {
         rrset_cache: &mut RRsetLruCache,
         min_ttl: &mut RRTtl,
     ) {
-        let trust_level = get_rrset_trust_level(message, section);
         for rrset in message.take_section(section).unwrap().into_iter() {
             self.rrset_refs.push(RRsetRef {
                 name: rrset.name.clone(),
@@ -95,6 +94,7 @@ impl MessageEntry {
             if rrset.ttl.0 < min_ttl.0 {
                 *min_ttl = rrset.ttl;
             }
+            let trust_level = get_rrset_trust_level(&rrset, message, section);
             rrset_cache.add_rrset(rrset, trust_level);
         }
     }
@@ -160,28 +160,6 @@ impl Drop for MessageEntry {
             Box::from_raw(self.name);
         }
     }
-}
-
-fn add_rrset_in_section(
-    rrset_cache: &mut RRsetLruCache,
-    message: &Message,
-    rrsets: Vec<RRset>,
-    section: SectionType,
-    min_ttl: &mut RRTtl,
-) -> Vec<RRsetRef> {
-    let mut refs = Vec::with_capacity(rrsets.len());
-    let trust_level = get_rrset_trust_level(message, section);
-    for rrset in rrsets.into_iter() {
-        refs.push(RRsetRef {
-            name: rrset.name.clone(),
-            typ: rrset.typ,
-        });
-        if rrset.ttl.0 < min_ttl.0 {
-            *min_ttl = rrset.ttl;
-        }
-        rrset_cache.add_rrset(rrset, trust_level);
-    }
-    refs
 }
 
 #[cfg(test)]
