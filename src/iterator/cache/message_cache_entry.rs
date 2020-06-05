@@ -31,10 +31,10 @@ impl MessageEntry {
         let auth_rrset_count = MessageEntry::section_rrset_count(&message, SectionType::Authority);
         let additional_rrset_count =
             MessageEntry::section_rrset_count(&message, SectionType::Additional);
-        let question = message.question.take().unwrap();
+        let question = message.question.as_ref().unwrap();
         let qtype = question.typ;
         let mut entry = MessageEntry {
-            name: Box::into_raw(Box::new(question.name)),
+            name: Box::into_raw(Box::new(question.name.clone())),
             typ: qtype,
             rcode: message.header.rcode,
             answer_rrset_count,
