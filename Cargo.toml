@@ -13,7 +13,7 @@ anyhow = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.8"
 lru = "0.1.15"
-tokio =  { version = "0.2", features = ["tcp", "udp", "time", "rt-threaded"]}
+tokio =  { version = "0.2", features = ["tcp", "udp", "time", "rt-threaded", "sync"]}
 tokio-util =  { version = "0.2", features = ["codec", "udp"]}
 futures = "0.3"
 bytes = "0.5"
