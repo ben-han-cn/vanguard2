@@ -25,8 +25,8 @@ lazy_static! {
         register_int_counter!("chc", "cache hit count").unwrap();
 }
 
-const RESP_BUFFER_LEN: usize = 4096;
-const REQ_BUFFER_LEN: usize = 4096;
+const RESP_BUFFER_LEN: usize = 1024;
+const REQ_BUFFER_LEN: usize = 1024;
 
 pub struct UdpServer<H: Handler> {
     handler: H,
