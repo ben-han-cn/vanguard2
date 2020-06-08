@@ -25,8 +25,8 @@ lazy_static! {
         register_int_counter!("chc", "cache hit count").unwrap();
 }
 
-const RESP_BUFFER_LEN: usize = 1024;
-const REQ_BUFFER_LEN: usize = 1024;
+const RESP_BUFFER_LEN: usize = 4096;
+const REQ_BUFFER_LEN: usize = 4096;
 
 pub struct UdpServer<H: Handler> {
     handler: H,
@@ -55,7 +55,7 @@ impl<H: Handler> UdpServer<H> {
                 if let Some(Ok((request, src))) = recv_stream.next().await {
                     QC_UDP_INT_COUNT.inc();
                     if let Err(e) = req_sender.try_send(Request::new(request, src)) {
-                        error!("send response get error:{}", e);
+                        //error!("send response get error:{}", e);
                     }
                 }
             }
@@ -75,7 +75,7 @@ impl<H: Handler> UdpServer<H> {
                         CHC_UDP_INT_COUNT.inc();
                     }
                     if let Err(e) = rsp_sender_back.try_send((response.response, src)) {
-                        error!("handle request get error:{}", e);
+                        //error!("handle request get error:{}", e);
                     }
                 }
             });
