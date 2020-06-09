@@ -1,12 +1,12 @@
 use super::udp_stream_coder::UdpStreamCoder;
 use crate::types::{Handler, Request};
+use futures::channel::mpsc::channel;
 use futures::{SinkExt, StreamExt};
 use prometheus::{IntCounter, IntGauge};
 use r53::Message;
 use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::net::UdpSocket;
-use tokio::sync::mpsc::channel;
 use tokio::time;
 use tokio_util::udp::UdpFramed;
 

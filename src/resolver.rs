@@ -34,6 +34,10 @@ impl Resolver {
 
         self.iterator.resolve(req).await
     }
+
+    async fn echo(&mut self, req: Request) -> anyhow::Result<Response> {
+        Ok(Response::new(req.request))
+    }
 }
 
 impl Handler for Resolver {
@@ -41,6 +45,7 @@ impl Handler for Resolver {
         &mut self,
         req: Request,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<Response>> + Send + '_>> {
-        Box::pin(self.do_resolve(req))
+        //Box::pin(self.do_resolve(req))
+        Box::pin(self.echo(req))
     }
 }
