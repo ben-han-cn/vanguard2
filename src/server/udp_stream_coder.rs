@@ -1,28 +1,22 @@
 use bytes::BytesMut;
-use r53::{Message, MessageRender};
+use r53::Message;
 use std::io;
 use tokio_util::codec::{Decoder, Encoder};
 
-pub struct UdpStreamCoder {
-    render: MessageRender,
-}
+pub struct UdpStreamCoder {}
 
 impl UdpStreamCoder {
     pub fn new() -> Self {
-        UdpStreamCoder {
-            render: MessageRender::new(),
-        }
+        UdpStreamCoder {}
     }
 }
 
 impl Encoder for UdpStreamCoder {
-    type Item = Message;
+    type Item = Vec<u8>;
     type Error = io::Error;
 
-    fn encode(&mut self, message: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        message.to_wire(&mut self.render);
-        dst.extend(self.render.data());
-        self.render.clear();
+    fn encode(&mut self, raw: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        dst.extend(raw);
         Ok(())
     }
 }

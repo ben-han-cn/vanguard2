@@ -3,7 +3,7 @@ use crate::types::{Handler, Request};
 use futures::channel::mpsc::channel;
 use futures::{SinkExt, StreamExt};
 use prometheus::{IntCounter, IntGauge};
-use r53::Message;
+use r53::{Message, MessageRender};
 use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::net::UdpSocket;
@@ -41,11 +41,11 @@ impl<H: Handler> UdpServer<H> {
         let socket = UdpSocket::bind(addr).await.unwrap();
         let (mut send_stream, mut recv_stream) =
             UdpFramed::new(socket, UdpStreamCoder::new()).split();
-        let (rsp_sender, mut resp_receiver) = channel::<(Message, SocketAddr)>(RESP_BUFFER_LEN);
+        let (rsp_sender, mut resp_receiver) = channel::<(Vec<u8>, SocketAddr)>(RESP_BUFFER_LEN);
         tokio::spawn(async move {
             loop {
-                let response = resp_receiver.next().await.unwrap();
-                send_stream.send(response).await.unwrap();
+                let response_and_addr = resp_receiver.next().await.unwrap();
+                send_stream.send(response_and_addr).await.unwrap();
             }
         });
 
@@ -74,7 +74,10 @@ impl<H: Handler> UdpServer<H> {
                     if response.cache_hit {
                         CHC_UDP_INT_COUNT.inc();
                     }
-                    if let Err(e) = rsp_sender_back.try_send((response.response, src)) {
+
+                    let mut render = MessageRender::new();
+                    response.response.to_wire(&mut render);
+                    if let Err(e) = rsp_sender_back.try_send((render.take_data(), src)) {
                         //error!("handle request get error:{}", e);
                     }
                 }
