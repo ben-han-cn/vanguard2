@@ -49,37 +49,25 @@ impl<H: Handler> UdpServer<H> {
             }
         });
 
-        let (mut req_sender, mut req_receiver) = channel::<Request>(REQ_BUFFER_LEN);
+        let (mut req_sender, mut req_receiver) = channel::<(Vec<u8>, SocketAddr)>(REQ_BUFFER_LEN);
         tokio::spawn(async move {
             loop {
-                if let Some(Ok((request, src))) = recv_stream.next().await {
-                    QC_UDP_INT_COUNT.inc();
-                    if let Err(e) = req_sender.try_send(Request::new(request, src)) {
+                if let Some(Ok(request_and_src)) = recv_stream.next().await {
+                    if let Err(e) = req_sender.try_send(request_and_src) {
                         //error!("send response get error:{}", e);
                     }
                 }
             }
         });
 
-        tokio::spawn(calculate_qps());
+        //tokio::spawn(calculate_qps());
 
         loop {
-            let query = req_receiver.next().await.unwrap();
+            let request_and_src = req_receiver.next().await.unwrap();
             let mut rsp_sender_back = rsp_sender.clone();
-            let mut handler = self.handler.clone();
             tokio::spawn(async move {
-                let src = query.client;
-                if let Ok(response) = handler.resolve(query).await {
-                    RC_UDP_INT_COUNT.inc();
-                    if response.cache_hit {
-                        CHC_UDP_INT_COUNT.inc();
-                    }
-
-                    let mut render = MessageRender::new();
-                    response.response.to_wire(&mut render);
-                    if let Err(e) = rsp_sender_back.try_send((render.take_data(), src)) {
-                        //error!("handle request get error:{}", e);
-                    }
+                if let Err(e) = rsp_sender_back.try_send(request_and_src) {
+                    //error!("handle request get error:{}", e);
                 }
             });
         }

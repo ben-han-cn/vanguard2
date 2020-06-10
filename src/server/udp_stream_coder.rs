@@ -22,13 +22,10 @@ impl Encoder for UdpStreamCoder {
 }
 
 impl Decoder for UdpStreamCoder {
-    type Item = Message;
+    type Item = Vec<u8>;
     type Error = io::Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        match Message::from_wire(src.as_ref()) {
-            Ok(message) => Ok(Some(message)),
-            Err(e) => Err(io::Error::new(io::ErrorKind::Other, e.to_string())),
-        }
+        Ok(Some(src.as_ref().clone().to_vec()))
     }
 }
