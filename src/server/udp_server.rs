@@ -41,6 +41,7 @@ impl<H: Handler> UdpServer<H> {
         let socket = UdpSocket::bind(addr).await.unwrap();
         let (mut send_stream, mut recv_stream) =
             UdpFramed::new(socket, UdpStreamCoder::new()).split();
+        /*
         let (rsp_sender, mut resp_receiver) = channel::<(Vec<u8>, SocketAddr)>(RESP_BUFFER_LEN);
         tokio::spawn(async move {
             loop {
@@ -60,7 +61,7 @@ impl<H: Handler> UdpServer<H> {
             }
         });
 
-        //tokio::spawn(calculate_qps());
+        tokio::spawn(calculate_qps());
 
         loop {
             let request_and_src = req_receiver.next().await.unwrap();
@@ -70,6 +71,12 @@ impl<H: Handler> UdpServer<H> {
                     //error!("handle request get error:{}", e);
                 }
             });
+        }
+        */
+        loop {
+            if let Some(Ok(request_and_src)) = recv_stream.next().await {
+                send_stream.send(request_and_src).await.unwrap();
+            }
         }
     }
 }
