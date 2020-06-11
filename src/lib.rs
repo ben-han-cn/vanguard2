@@ -13,6 +13,7 @@ pub mod controller;
 mod iterator;
 pub mod logger;
 pub mod metrics;
+mod msgbuf_pool;
 pub mod resolver;
 pub mod server;
 mod types;
