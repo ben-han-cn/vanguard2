@@ -13,6 +13,7 @@ use crate::msgbuf_pool::{MessageBuf, MessageBufPool};
 use crate::types::{Request, Response};
 
 const UDP_SOCKET: Token = Token(0);
+const DEFAULT_REQUEST_QUEUE_LEN: usize = 4096;
 
 #[derive(Clone)]
 pub struct Resolver {
@@ -26,8 +27,10 @@ impl Resolver {
     }
 
     pub fn run(&self) {
-        let (req_sender, req_receiver) = bounded::<(MessageBuf, SocketAddr)>(1024);
-        let (resp_sender, resp_receiver) = bounded::<(MessageBuf, SocketAddr)>(1024);
+        let (req_sender, req_receiver) =
+            bounded::<(MessageBuf, SocketAddr)>(DEFAULT_REQUEST_QUEUE_LEN);
+        let (resp_sender, resp_receiver) =
+            bounded::<(MessageBuf, SocketAddr)>(DEFAULT_REQUEST_QUEUE_LEN);
         let mut poll = Poll::new().unwrap();
         let mut events = Events::with_capacity(1);
         let addr = "0.0.0.0:53".parse().unwrap();
@@ -35,7 +38,7 @@ impl Resolver {
         poll.registry()
             .register(&mut socket, UDP_SOCKET, Interest::READABLE)
             .unwrap();
-        let msgbuf_pool = Arc::new(Mutex::new(MessageBufPool::new(1024)));
+        let msgbuf_pool = Arc::new(Mutex::new(MessageBufPool::new(DEFAULT_REQUEST_QUEUE_LEN)));
         let socket = Arc::new(socket);
         thread::spawn({
             let socket_sender = socket.clone();
