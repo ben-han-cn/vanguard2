@@ -30,6 +30,9 @@ slog-scope = "4.3.0"
 slog-term = "2"
 slog-async = "2"
 treebitmap = "0.4.0"
+mio = { version = "0.7", features = ["os-poll", "udp"] }
+crossbeam = "0.7"
+num_cpus = { version = "1.13.0" }
 
 [[bin]]
 name = "vanguard2"
