@@ -62,9 +62,9 @@ impl Resolver {
             });
         }
 
+        let mut buf = [0; 512];
         loop {
             poll.poll(&mut events, None).unwrap();
-            let mut buf = [0; 512];
             for event in events.iter() {
                 match event.token() {
                     UDP_SOCKET => loop {
