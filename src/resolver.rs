@@ -6,8 +6,9 @@ use anyhow;
 use crossbeam::channel::bounded;
 use mio::net::UdpSocket;
 use mio::{Events, Interest, Poll, Token};
+use r53::{Message, MessageRender};
 
-use crate::auth::AuthServer;
+//use crate::auth::AuthServer;
 use crate::config::VanguardConfig;
 use crate::msgbuf_pool::{MessageBuf, MessageBufPool};
 use crate::types::{Request, Response};
@@ -17,13 +18,13 @@ const DEFAULT_REQUEST_QUEUE_LEN: usize = 4096;
 
 #[derive(Clone)]
 pub struct Resolver {
-    auth_server: AuthServer,
+    //auth_server: AuthServer,
 }
 
 impl Resolver {
     pub fn new(config: &VanguardConfig) -> Self {
-        let auth_server = AuthServer::new(&config.auth);
-        Resolver { auth_server }
+        //let auth_server = AuthServer::new(&config.auth);
+        Resolver {}
     }
 
     pub fn run(&self) {
@@ -58,8 +59,14 @@ impl Resolver {
                 let req_receiver = req_receiver.clone();
                 let resp_sender = resp_sender.clone();
                 move || loop {
-                    if let Ok((buf, addr)) = req_receiver.recv() {
-                        resp_sender.try_send((buf, addr));
+                    if let Ok((mut buf, addr)) = req_receiver.recv() {
+                        if let Ok(msg) = Message::from_wire(&buf.data[0..buf.len]) {
+                            let mut render = MessageRender::new(&mut buf.data);
+                            if let Ok(len) = msg.to_wire(&mut render) {
+                                buf.len = len;
+                                resp_sender.try_send((buf, addr));
+                            }
+                        }
                     }
                 }
             });

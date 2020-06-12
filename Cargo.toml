@@ -7,8 +7,8 @@ publish = false
 
 [dependencies]
 clap = { version = "2.32", default-features = false}
-r53 = { git = "https://github.com/ben-han-cn/r53" }
-domaintree = { git = "https://github.com/ben-han-cn/domaintree"}
+r53 = { git = "https://github.com/ben-han-cn/r53", branch="msg-render-optimize"}
+#domaintree = { git = "https://github.com/ben-han-cn/domaintree"}
 anyhow = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.8"
@@ -37,10 +37,6 @@ num_cpus = { version = "1.13.0" }
 [[bin]]
 name = "vanguard2"
 path = "src/main.rs"
-
-[[bin]]
-name = "vanguard2-client"
-path = "src/client.rs"
 
 [build-dependencies]
 tonic-build = "0.1.0"
