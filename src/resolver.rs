@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use std::{io, thread};
 
 use anyhow;
-use crossbeam::channel::bounded;
+use crossbeam::channel::{bounded, TrySendError};
 use mio::net::UdpSocket;
 use mio::{Events, Interest, Poll, Token};
 use r53::{Message, MessageRender};
@@ -39,7 +39,11 @@ impl Resolver {
         poll.registry()
             .register(&mut socket, UDP_SOCKET, Interest::READABLE)
             .unwrap();
-        let msgbuf_pool = Arc::new(Mutex::new(MessageBufPool::new(DEFAULT_REQUEST_QUEUE_LEN)));
+
+        //we need to keep both recv and send queue full
+        let msgbuf_pool = Arc::new(Mutex::new(MessageBufPool::new(
+            2 * DEFAULT_REQUEST_QUEUE_LEN,
+        )));
         let socket = Arc::new(socket);
         thread::spawn({
             let socket_sender = socket.clone();
@@ -59,6 +63,7 @@ impl Resolver {
                 let req_receiver = req_receiver.clone();
                 let resp_sender = resp_sender.clone();
                 let auth_server = self.auth_server.clone();
+                let msgbuf_pool = msgbuf_pool.clone();
                 move || loop {
                     if let Ok((mut buf, addr)) = req_receiver.recv() {
                         if let Ok(msg) = Message::from_wire(&buf.data[0..buf.len]) {
@@ -67,9 +72,15 @@ impl Resolver {
                                 let mut render = MessageRender::new(&mut buf.data);
                                 if let Ok(len) = response.to_wire(&mut render) {
                                     buf.len = len;
-                                    resp_sender.try_send((buf, addr));
+                                    if let Err(TrySendError::Full((buf, _))) =
+                                        resp_sender.try_send((buf, addr))
+                                    {
+                                        msgbuf_pool.lock().unwrap().release(buf);
+                                    }
                                 }
                             }
+                        } else {
+                            msgbuf_pool.lock().unwrap().release(buf);
                         }
                     }
                 }
@@ -87,7 +98,11 @@ impl Resolver {
                             if let Some(mut msg_buf) = msg_buf {
                                 msg_buf.data[0..len].copy_from_slice(&buf[0..len]);
                                 msg_buf.len = len;
-                                req_sender.try_send((msg_buf, addr));
+                                if let Err(TrySendError::Full((buf, _))) =
+                                    req_sender.try_send((msg_buf, addr))
+                                {
+                                    msgbuf_pool.lock().unwrap().release(buf);
+                                }
                             }
                         } else {
                             break;
