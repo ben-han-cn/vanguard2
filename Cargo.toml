@@ -8,7 +8,7 @@ publish = false
 [dependencies]
 clap = { version = "2.32", default-features = false}
 r53 = { git = "https://github.com/ben-han-cn/r53", branch="msg-render-optimize"}
-#domaintree = { git = "https://github.com/ben-han-cn/domaintree"}
+domaintree = { git = "https://github.com/ben-han-cn/domaintree", branch="msg-render-optimize"}
 anyhow = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.8"

@@ -7,7 +7,7 @@ extern crate slog;
 #[macro_use]
 extern crate slog_scope;
 
-//mod auth;
+mod auth;
 pub mod config;
 //pub mod controller;
 pub mod logger;
