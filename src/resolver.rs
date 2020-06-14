@@ -73,10 +73,8 @@ impl Resolver {
                                 let mut render = MessageRender::new(&mut buf.data);
                                 if let Ok(len) = response.to_wire(&mut render) {
                                     buf.len = len;
-                                    if let Err(TrySendError::Full((buf, _))) =
-                                        resp_sender.try_send((buf, addr))
-                                    {
-                                        msgbuf_pool.lock().unwrap().release(buf);
+                                    if let Err(e) = resp_sender.send((buf, addr)) {
+                                        println!("----> send get err {}", e);
                                     }
                                 }
                             }
