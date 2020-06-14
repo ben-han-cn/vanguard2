@@ -1,3 +1,4 @@
+use std::mem;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::{io, thread};
@@ -88,20 +89,25 @@ impl Resolver {
         }
 
         let mut buf = [0; 512];
+        let mut msg_buf: Option<MessageBuf> = None;
         loop {
             poll.poll(&mut events, None).unwrap();
             for event in events.iter() {
                 match event.token() {
                     UDP_SOCKET => loop {
                         if let Ok((len, addr)) = socket.recv_from(&mut buf) {
-                            let msg_buf = msgbuf_pool.lock().unwrap().allocate();
-                            if let Some(mut msg_buf) = msg_buf {
-                                msg_buf.data[0..len].copy_from_slice(&buf[0..len]);
-                                msg_buf.len = len;
+                            if msg_buf.is_none() {
+                                msg_buf = msgbuf_pool.lock().unwrap().allocate();
+                            }
+
+                            if msg_buf.is_some() {
+                                let mut msg_buf_ = mem::replace(&mut msg_buf, None).unwrap();
+                                msg_buf_.data[0..len].copy_from_slice(&buf[0..len]);
+                                msg_buf_.len = len;
                                 if let Err(TrySendError::Full((buf, _))) =
-                                    req_sender.try_send((msg_buf, addr))
+                                    req_sender.try_send((msg_buf_, addr))
                                 {
-                                    msgbuf_pool.lock().unwrap().release(buf);
+                                    msg_buf = Some(buf);
                                 }
                             }
                         } else {
