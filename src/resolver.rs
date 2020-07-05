@@ -76,7 +76,6 @@ impl Resolver {
                     if let Ok((mut buf, addr)) = req_receiver.recv() {
                         if let Ok(msg) = Message::from_wire(&buf.data[0..buf.len]) {
                             let req = Request::new(msg, addr);
-                            break;
                             if let Some(response) = auth_server.resolve(&req) {
                                 let mut render = MessageRender::new(&mut buf.data);
                                 if let Ok(len) = response.to_wire(&mut render) {
@@ -103,11 +102,8 @@ impl Resolver {
             for event in events.iter() {
                 match event.token() {
                     UDP_SOCKET => loop {
-                        if let Ok((len, addr)) = socket.recv_from(&mut buf) {
-                            let mut retry_count = 0;
-                            let mut req_handled = false;
-                            loop {
-                                /*
+                        match socket.recv_from(&mut buf) {
+                            Ok((len, addr)) => {
                                 if let Some(mut msg_buf) =
                                     pools[handler_index].lock().unwrap().allocate()
                                 {
@@ -118,35 +114,18 @@ impl Resolver {
                                     {
                                         pools[handler_index].lock().unwrap().release(buf);
                                     } else {
-                                        req_handled = true;
                                     }
                                 }
                                 handler_index = (handler_index + 1) % worker_thread_count;
-                                if req_handled {
-                                    break;
-                                }
-                                retry_count += 1;
-                                if retry_count == worker_thread_count {
-                                    break;
-                                }
-                                */
                             }
-
-                            if let Some(mut msg_buf) =
-                                pools[handler_index].lock().unwrap().allocate()
-                            {
-                                msg_buf.data[0..len].copy_from_slice(&buf[0..len]);
-                                msg_buf.len = len;
-                                if let Err(TrySendError::Full((buf, _))) =
-                                    senders[handler_index].try_send((msg_buf, addr))
-                                {
-                                    pools[handler_index].lock().unwrap().release(buf);
-                                }
+                            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                                break;
                             }
-                            handler_index = (handler_index + 1) % worker_thread_count;
+                            Err(e) => {
+                                panic!("get unexpected error");
+                            }
                         }
                     },
-
                     _ => {
                         println!("Got event for unexpected token: {:?}", event);
                     }
