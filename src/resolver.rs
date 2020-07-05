@@ -95,23 +95,36 @@ impl Resolver {
         }
 
         let mut buf = [0; 512];
+        let mut handler_index = 0;
         loop {
             poll.poll(&mut events, None).unwrap();
             for event in events.iter() {
                 match event.token() {
                     UDP_SOCKET => loop {
                         if let Ok((len, addr)) = socket.recv_from(&mut buf) {
-                            for i in 0..worker_thread_count {
-                                if let Some(mut msg_buf) = pools[i].lock().unwrap().allocate() {
+                            let mut retry_count = 0;
+                            let mut req_handled = false;
+                            loop {
+                                if let Some(mut msg_buf) =
+                                    pools[handler_index].lock().unwrap().allocate()
+                                {
                                     msg_buf.data[0..len].copy_from_slice(&buf[0..len]);
                                     msg_buf.len = len;
                                     if let Err(TrySendError::Full((buf, _))) =
-                                        senders[i].try_send((msg_buf, addr))
+                                        senders[handler_index].try_send((msg_buf, addr))
                                     {
-                                        pools[i].lock().unwrap().release(buf);
+                                        pools[handler_index].lock().unwrap().release(buf);
                                     } else {
-                                        break;
+                                        req_handled = true;
                                     }
+                                }
+                                handler_index = (handler_index + 1) % worker_thread_count;
+                                if req_handled {
+                                    break;
+                                }
+                                retry_count += 1;
+                                if retry_count == worker_thread_count {
+                                    break;
                                 }
                             }
                         }
