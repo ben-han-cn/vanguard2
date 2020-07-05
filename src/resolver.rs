@@ -15,7 +15,7 @@ use crate::msgbuf_pool::{MessageBuf, MessageBufPool};
 use crate::types::{Request, Response};
 
 const UDP_SOCKET: Token = Token(0);
-const DEFAULT_REQUEST_QUEUE_LEN: usize = 4096;
+const DEFAULT_REQUEST_QUEUE_LEN: usize = 2048;
 
 #[derive(Clone)]
 pub struct Resolver {
@@ -104,19 +104,31 @@ impl Resolver {
                     UDP_SOCKET => loop {
                         match socket.recv_from(&mut buf) {
                             Ok((len, addr)) => {
-                                if let Some(mut msg_buf) =
-                                    pools[handler_index].lock().unwrap().allocate()
-                                {
-                                    msg_buf.data[0..len].copy_from_slice(&buf[0..len]);
-                                    msg_buf.len = len;
-                                    if let Err(TrySendError::Full((buf, _))) =
-                                        senders[handler_index].try_send((msg_buf, addr))
+                                let mut retry_count = 0;
+                                let mut req_handled = false;
+                                loop {
+                                    if let Some(mut msg_buf) =
+                                        pools[handler_index].lock().unwrap().allocate()
                                     {
-                                        pools[handler_index].lock().unwrap().release(buf);
-                                    } else {
+                                        msg_buf.data[0..len].copy_from_slice(&buf[0..len]);
+                                        msg_buf.len = len;
+                                        if let Err(TrySendError::Full((buf, _))) =
+                                            senders[handler_index].try_send((msg_buf, addr))
+                                        {
+                                            pools[handler_index].lock().unwrap().release(buf);
+                                        } else {
+                                            req_handled = true;
+                                        }
+                                    }
+                                    handler_index = (handler_index + 1) % worker_thread_count;
+                                    if req_handled {
+                                        break;
+                                    }
+                                    retry_count += 1;
+                                    if retry_count == worker_thread_count {
+                                        break;
                                     }
                                 }
-                                handler_index = (handler_index + 1) % worker_thread_count;
                             }
                             Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
                                 break;
