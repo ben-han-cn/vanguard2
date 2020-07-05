@@ -29,8 +29,6 @@ impl Resolver {
     }
 
     pub fn run(&self) {
-        let (resp_sender, resp_receiver) =
-            bounded::<(MessageBuf, SocketAddr)>(DEFAULT_REQUEST_QUEUE_LEN);
         let mut poll = Poll::new().unwrap();
         let mut events = Events::with_capacity(1);
         let addr = "0.0.0.0:53".parse().unwrap();
@@ -49,6 +47,9 @@ impl Resolver {
             pools.push(pool);
             pools
         });
+        println!("create {} worker thread", worker_thread_count);
+        let (resp_sender, resp_receiver) =
+            bounded::<(MessageBuf, SocketAddr)>(worker_thread_count * DEFAULT_REQUEST_QUEUE_LEN);
 
         let socket = Arc::new(socket);
         thread::spawn({
@@ -75,6 +76,7 @@ impl Resolver {
                     if let Ok((mut buf, addr)) = req_receiver.recv() {
                         if let Ok(msg) = Message::from_wire(&buf.data[0..buf.len]) {
                             let req = Request::new(msg, addr);
+                            break;
                             if let Some(response) = auth_server.resolve(&req) {
                                 let mut render = MessageRender::new(&mut buf.data);
                                 if let Ok(len) = response.to_wire(&mut render) {
@@ -105,6 +107,7 @@ impl Resolver {
                             let mut retry_count = 0;
                             let mut req_handled = false;
                             loop {
+                                /*
                                 if let Some(mut msg_buf) =
                                     pools[handler_index].lock().unwrap().allocate()
                                 {
@@ -126,7 +129,21 @@ impl Resolver {
                                 if retry_count == worker_thread_count {
                                     break;
                                 }
+                                */
                             }
+
+                            if let Some(mut msg_buf) =
+                                pools[handler_index].lock().unwrap().allocate()
+                            {
+                                msg_buf.data[0..len].copy_from_slice(&buf[0..len]);
+                                msg_buf.len = len;
+                                if let Err(TrySendError::Full((buf, _))) =
+                                    senders[handler_index].try_send((msg_buf, addr))
+                                {
+                                    pools[handler_index].lock().unwrap().release(buf);
+                                }
+                            }
+                            handler_index = (handler_index + 1) % worker_thread_count;
                         }
                     },
 
