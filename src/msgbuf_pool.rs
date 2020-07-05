@@ -4,6 +4,7 @@ const MAX_BUF_LEN: usize = 512;
 
 #[derive(Debug)]
 pub struct MessageBuf {
+    pub pool_id: u8,
     pub data: Box<[u8]>,
     pub len: usize,
 }
@@ -11,16 +12,18 @@ pub struct MessageBuf {
 type Slot = Option<(MessageBuf, usize)>;
 
 pub struct MessageBufPool {
+    pub pool_id: u8,
     slots: Vec<Slot>,
     len: usize,
     next: usize,
 }
 
 impl MessageBufPool {
-    pub fn new(len: usize) -> Self {
+    pub fn new(pool_id: u8, len: usize) -> Self {
         let mut slots = (0..len).fold(Vec::with_capacity(len), |mut v, i| {
             v.push(Some((
                 MessageBuf {
+                    pool_id: pool_id,
                     data: Box::new([0; MAX_BUF_LEN]),
                     len: 0,
                 },
@@ -30,6 +33,7 @@ impl MessageBufPool {
         });
 
         MessageBufPool {
+            pool_id,
             slots,
             len,
             next: 0,
@@ -50,6 +54,8 @@ impl MessageBufPool {
     }
 
     pub fn release(&mut self, mut buf: MessageBuf) {
+        assert!(buf.pool_id == self.pool_id);
+
         if let Some(free_index) = self.slots.iter().position(|s| s.is_none()) {
             buf.len = 0;
             self.slots[free_index] = Some((buf, self.next));

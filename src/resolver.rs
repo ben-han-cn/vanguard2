@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::{io, thread};
 
 use anyhow;
-use crossbeam::channel::{bounded, TrySendError};
+use crossbeam::channel::{bounded, Receiver, Sender, TrySendError};
 use mio::net::UdpSocket;
 use mio::{Events, Interest, Poll, Token};
 use r53::{Message, MessageRender};
@@ -29,8 +29,6 @@ impl Resolver {
     }
 
     pub fn run(&self) {
-        let (req_sender, req_receiver) =
-            bounded::<(MessageBuf, SocketAddr)>(DEFAULT_REQUEST_QUEUE_LEN);
         let (resp_sender, resp_receiver) =
             bounded::<(MessageBuf, SocketAddr)>(DEFAULT_REQUEST_QUEUE_LEN);
         let mut poll = Poll::new().unwrap();
@@ -41,30 +39,38 @@ impl Resolver {
             .register(&mut socket, UDP_SOCKET, Interest::READABLE)
             .unwrap();
 
-        //we need to keep both recv and send queue full
-        let msgbuf_pool = Arc::new(Mutex::new(MessageBufPool::new(
-            2 * DEFAULT_REQUEST_QUEUE_LEN,
-        )));
+        let cpus = num_cpus::get();
+        let worker_thread_count = if cpus > 2 { cpus - 2 } else { 1 };
+        let pools = (0..worker_thread_count).fold(Vec::new(), |mut pools, i| {
+            let pool = Arc::new(Mutex::new(MessageBufPool::new(
+                i as u8,
+                DEFAULT_REQUEST_QUEUE_LEN,
+            )));
+            pools.push(pool);
+            pools
+        });
+
         let socket = Arc::new(socket);
         thread::spawn({
             let socket_sender = socket.clone();
-            let msgbuf_pool = msgbuf_pool.clone();
+            let pools = pools.clone();
             move || loop {
                 if let Ok((buf, addr)) = resp_receiver.recv() {
                     socket_sender.send_to(&buf.data[..buf.len], addr);
-                    msgbuf_pool.lock().unwrap().release(buf);
+                    pools[buf.pool_id as usize].lock().unwrap().release(buf);
                 }
             }
         });
 
-        let cpus = num_cpus::get();
-        let worker_thread_count = if cpus > 2 { cpus - 2 } else { 1 };
+        let mut senders = Vec::with_capacity(worker_thread_count);
         for i in (0..worker_thread_count) {
+            let (req_sender, req_receiver) =
+                bounded::<(MessageBuf, SocketAddr)>(DEFAULT_REQUEST_QUEUE_LEN);
+            senders.push(req_sender);
+            let pool = pools[i].clone();
             thread::spawn({
-                let req_receiver = req_receiver.clone();
                 let resp_sender = resp_sender.clone();
                 let auth_server = self.auth_server.clone();
-                let msgbuf_pool = msgbuf_pool.clone();
                 move || loop {
                     if let Ok((mut buf, addr)) = req_receiver.recv() {
                         if let Ok(msg) = Message::from_wire(&buf.data[0..buf.len]) {
@@ -73,13 +79,15 @@ impl Resolver {
                                 let mut render = MessageRender::new(&mut buf.data);
                                 if let Ok(len) = response.to_wire(&mut render) {
                                     buf.len = len;
-                                    if let Err(e) = resp_sender.send((buf, addr)) {
-                                        println!("----> send get err {}", e);
+                                    if let Err(TrySendError::Full((buf, _))) =
+                                        resp_sender.try_send((buf, addr))
+                                    {
+                                        pool.lock().unwrap().release(buf);
                                     }
                                 }
                             }
                         } else {
-                            msgbuf_pool.lock().unwrap().release(buf);
+                            pool.lock().unwrap().release(buf);
                         }
                     }
                 }
@@ -87,31 +95,28 @@ impl Resolver {
         }
 
         let mut buf = [0; 512];
-        let mut msg_buf: Option<MessageBuf> = None;
         loop {
             poll.poll(&mut events, None).unwrap();
             for event in events.iter() {
                 match event.token() {
                     UDP_SOCKET => loop {
                         if let Ok((len, addr)) = socket.recv_from(&mut buf) {
-                            if msg_buf.is_none() {
-                                msg_buf = msgbuf_pool.lock().unwrap().allocate();
-                            }
-
-                            if msg_buf.is_some() {
-                                let mut msg_buf_ = mem::replace(&mut msg_buf, None).unwrap();
-                                msg_buf_.data[0..len].copy_from_slice(&buf[0..len]);
-                                msg_buf_.len = len;
-                                if let Err(TrySendError::Full((buf, _))) =
-                                    req_sender.try_send((msg_buf_, addr))
-                                {
-                                    msg_buf = Some(buf);
+                            for i in 0..worker_thread_count {
+                                if let Some(mut msg_buf) = pools[i].lock().unwrap().allocate() {
+                                    msg_buf.data[0..len].copy_from_slice(&buf[0..len]);
+                                    msg_buf.len = len;
+                                    if let Err(TrySendError::Full((buf, _))) =
+                                        senders[i].try_send((msg_buf, addr))
+                                    {
+                                        pools[i].lock().unwrap().release(buf);
+                                    } else {
+                                        break;
+                                    }
                                 }
                             }
-                        } else {
-                            break;
                         }
                     },
+
                     _ => {
                         println!("Got event for unexpected token: {:?}", event);
                     }
